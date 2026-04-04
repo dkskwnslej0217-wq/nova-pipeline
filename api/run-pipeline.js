@@ -17,11 +17,14 @@ const GITHUB_REPO     = 'dkskwnslej0217-wq/nova-pipeline';
 
 // ─── 중국어/외계어 제거 필터 ──────────────────────────────
 function filterKoreanOnly(text) {
-  // 중국어(CJK) 제거, 한국어·숫자·영문·기본 문장부호·이모지만 유지
   return text
     .replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '') // CJK 한자
     .replace(/[\u3000-\u303F]/g, '') // CJK 구두점
-    .replace(/\s{2,}/g, ' ') // 이중 공백 정리
+    .replace(/[\u0600-\u06FF\u0750-\u077F]/g, '') // 아랍어
+    .replace(/[\u0400-\u04FF]/g, '') // 러시아어(키릴)
+    .replace(/[\u0900-\u097F]/g, '') // 힌디어
+    .replace(/[\u0080-\u00FF]/g, '') // 라틴 확장 특수문자
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
@@ -70,8 +73,8 @@ async function generateHooks(keywords) {
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages: [
-        { role: 'system', content: '당신은 한국어 SNS 콘텐츠 작성 전문가입니다. 오직 한국어만 사용하세요. 중국어, 영어, 일본어 절대 사용 금지. 한국어만.' },
-        { role: 'user', content: `키워드: ${keywords}\n\n[한국어만 사용할 것]\n스레드 첫 줄 훅 3개. 각 40자 이내. 번호 붙여서. 강렬하게.` }
+        { role: 'system', content: '너는 30대 한국 1인 창업자야. 친구한테 카톡 보내듯이 써. 격식 없이, 짧게, 진짜 사람이 쓴 것처럼. 한국어만. 중국어/영어/아랍어 절대 금지.' },
+        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개. 40자 이내. 번호 붙여서. 친구한테 말하듯 자연스럽게.` }
       ],
       max_tokens: 400,
     }),
@@ -83,7 +86,7 @@ async function generateHooks(keywords) {
 
 // ─── 14d: 최종 완성 (Groq 우선 → 실패 시 Claude 폴백) ──────
 async function finalizeContent(keywords, hooks) {
-  const prompt = `[CRITICAL: 한국어만 사용. 중국어·영어·일본어 한 글자도 금지. 위반 시 완전 실패.]\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n가장 강한 훅 1개 골라서 스레드 콘텐츠 완성:\n[훅 - 1줄]\n[본문 - 3~5줄, 짧고 강하게]\n[마무리 - 행동 유도 1줄]\n\n한국어만 사용, 소상공인/1인 창업자 타겟, 실용적이고 친근한 톤.`;
+  const prompt = `너는 30대 한국 1인 창업자야. 한국어만 써. 중국어/영어/아랍어 절대 금지.\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n제일 자연스러운 훅 1개 골라서 스레드 글 완성해줘:\n첫줄: 훅 (친구한테 말하듯)\n본문: 3~4줄, 짧고 진짜 경험담처럼\n마지막: 공감 유도 or 질문 1줄\n\n절대 AI 같은 말투 금지. 진짜 사람이 쓴 것처럼.`;
 
   // 1차: Groq (무료)
   try {
