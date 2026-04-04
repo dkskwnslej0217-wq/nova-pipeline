@@ -245,6 +245,23 @@ export default async function handler(req) {
       await tg(`⚠️ 영상 트리거 오류: ${e.message}`);
     }
 
+    // Threads 발행
+    try {
+      const threadsRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-threads', {
+        method: 'POST',
+        headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: final.slice(0, 500) }),
+      });
+      const threadsData = await threadsRes.json();
+      if (threadsData.ok) {
+        await tg(`📱 Threads 발행 완료 (post_id: ${threadsData.post_id})`);
+      } else {
+        await tg(`⚠️ Threads 발행 실패: ${threadsData.error}`);
+      }
+    } catch(e) {
+      await tg(`⚠️ Threads 발행 오류: ${e.message}`);
+    }
+
     // 성공 알림
     await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${final.slice(0, 300)}...`);
 
