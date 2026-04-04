@@ -15,6 +15,16 @@ const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
 const GITHUB_REPO     = 'dkskwnslej0217-wq/nova-pipeline';
 
+// ─── 중국어/외계어 제거 필터 ──────────────────────────────
+function filterKoreanOnly(text) {
+  // 중국어(CJK) 제거, 한국어·숫자·영문·기본 문장부호·이모지만 유지
+  return text
+    .replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '') // CJK 한자
+    .replace(/[\u3000-\u303F]/g, '') // CJK 구두점
+    .replace(/\s{2,}/g, ' ') // 이중 공백 정리
+    .trim();
+}
+
 // ─── Telegram 알림 ────────────────────────────────────────
 async function tg(msg) {
   try {
@@ -195,10 +205,12 @@ export default async function handler(req) {
     }
 
     // 14c Groq
-    const hooks = await generateHooks(keywords);
+    const hooksRaw = await generateHooks(keywords);
+    const hooks = filterKoreanOnly(hooksRaw);
 
     // 14d Claude
-    const final = await finalizeContent(keywords, hooks);
+    const finalRaw = await finalizeContent(keywords, hooks);
+    const final = filterKoreanOnly(finalRaw);
 
     // Supabase 저장
     const topic = keywords.split(',')[0].trim();
