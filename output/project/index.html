@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVA — PROJECT</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{min-height:100%;background:#000008;font-family:'Orbitron',sans-serif;color:#fff;overflow-x:hidden;}
+canvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+#app{position:relative;z-index:10;max-width:720px;margin:0 auto;padding:1.6rem 1.2rem 4rem;}
+
+/* 헤더 */
+#top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:2.4rem;padding-bottom:1rem;border-bottom:1px solid rgba(139,92,246,.12);}
+#top-left{display:flex;align-items:center;gap:.7rem;}
+#top-orb{width:28px;height:28px;border-radius:50%;box-shadow:0 0 14px rgba(139,92,246,.6);}
+#top-name{font-size:.9rem;font-weight:900;letter-spacing:.2em;color:#fff;text-shadow:0 0 12px #7c3aed;}
+#top-right{display:flex;gap:.6rem;align-items:center;}
+.nav-link{font-size:.72rem;letter-spacing:.12em;color:rgba(167,139,250,.8);text-decoration:none;
+  border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:.28rem .65rem;transition:.2s;}
+.nav-link:hover{color:#c4b5fd;border-color:#8b5cf6;}
+
+/* 섹션 타이틀 */
+.sec-title{font-size:.72rem;letter-spacing:.25em;color:rgba(196,181,253,.85);margin-bottom:1rem;
+  text-transform:uppercase;display:flex;align-items:center;gap:.5rem;}
+.sec-title::after{content:'';flex:1;height:1px;background:rgba(139,92,246,.1);}
+
+/* 프로젝트 카드 */
+#projects-section{margin-bottom:2.4rem;}
+.project-card{
+  background:rgba(10,4,30,.7);border:1px solid rgba(139,92,246,.18);
+  border-radius:14px;padding:1.3rem 1.4rem;margin-bottom:.8rem;
+  transition:border-color .2s,box-shadow .2s;cursor:pointer;
+}
+.project-card:hover{border-color:rgba(139,92,246,.4);box-shadow:0 0 20px rgba(109,40,217,.15);}
+.project-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.6rem;}
+.project-title{font-size:.68rem;font-weight:700;letter-spacing:.12em;color:#fff;line-height:1.4;}
+.project-tag{font-size:.65rem;letter-spacing:.12em;padding:.22rem .6rem;border-radius:20px;
+  background:rgba(109,40,217,.2);border:1px solid rgba(139,92,246,.3);color:#c4b5fd;white-space:nowrap;margin-left:.5rem;flex-shrink:0;}
+.project-desc{font-size:.78rem;letter-spacing:.04em;color:rgba(196,181,253,.75);line-height:1.9;margin-bottom:.8rem;}
+.project-notes-area{
+  width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(139,92,246,.2);
+  border-radius:8px;color:#e0d8ff;font-family:'Orbitron',sans-serif;
+  font-size:.82rem;letter-spacing:.03em;padding:.65rem .9rem;resize:none;
+  outline:none;line-height:1.8;min-height:60px;transition:border-color .2s;
+}
+.project-notes-area:focus{border-color:rgba(139,92,246,.5);}
+.project-notes-area::placeholder{color:rgba(255,255,255,.3);}
+.save-note-btn{
+  margin-top:.5rem;font-size:.7rem;letter-spacing:.1em;
+  background:rgba(109,40,217,.25);border:1px solid rgba(139,92,246,.3);
+  border-radius:6px;color:#c4b5fd;font-family:'Orbitron',sans-serif;
+  padding:.3rem .8rem;cursor:pointer;transition:.2s;
+}
+.save-note-btn:hover{background:rgba(109,40,217,.4);}
+
+/* 성과 기록 버튼 */
+.stat-btn{
+  margin-top:.5rem;margin-left:.5rem;font-size:.7rem;letter-spacing:.1em;
+  background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);
+  border-radius:6px;color:rgba(52,211,153,.9);font-family:'Orbitron',sans-serif;
+  padding:.3rem .8rem;cursor:pointer;transition:.2s;
+}
+.stat-btn:hover{background:rgba(52,211,153,.22);}
+
+/* 성과 미니 뱃지 */
+.stat-mini{display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap;}
+.stat-chip{font-size:.65rem;letter-spacing:.06em;color:rgba(52,211,153,.75);
+  background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.2);
+  border-radius:4px;padding:.18rem .5rem;}
+
+/* 성과 모달 */
+#stat-modal{display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,8,.88);backdrop-filter:blur(10px);
+  align-items:center;justify-content:center;}
+#stat-modal.open{display:flex;}
+#stat-box{width:min(92vw,420px);background:rgba(6,1,22,.98);
+  border:1px solid rgba(52,211,153,.25);border-radius:20px;padding:2rem 1.8rem 1.6rem;}
+#stat-box h2{font-size:1.1rem;font-weight:900;letter-spacing:.2em;color:#fff;margin-bottom:.3rem;}
+#stat-box p{font-size:.78rem;letter-spacing:.08em;color:rgba(52,211,153,.7);margin-bottom:1.2rem;}
+.stat-field{margin-bottom:.8rem;}
+.stat-field label{display:block;font-size:.72rem;letter-spacing:.12em;color:rgba(196,181,253,.85);margin-bottom:.3rem;}
+.stat-field input,.stat-field select{
+  width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(139,92,246,.25);
+  border-radius:8px;color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:.82rem;letter-spacing:.04em;padding:.6rem .8rem;outline:none;
+}
+.stat-field input::placeholder{color:rgba(255,255,255,.35);}
+.stat-row{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;}
+#stat-submit{
+  width:100%;background:linear-gradient(135deg,#065f46,#059669);
+  border:none;border-radius:10px;color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:.9rem;font-weight:700;letter-spacing:.12em;padding:.8rem;cursor:pointer;
+  transition:opacity .2s;margin-bottom:.5rem;margin-top:.4rem;
+}
+#stat-submit:hover{opacity:.85;}
+#stat-cancel{width:100%;background:none;border:none;color:rgba(139,92,246,.55);
+  font-family:'Orbitron',sans-serif;font-size:.78rem;letter-spacing:.08em;cursor:pointer;padding:.3rem;}
+#stat-cancel:hover{color:rgba(167,139,250,.8);}
+
+/* 새 프로젝트 */
+#new-project-btn{
+  width:100%;background:none;border:1px dashed rgba(139,92,246,.3);
+  border-radius:14px;padding:1rem;cursor:pointer;
+  color:rgba(167,139,250,.7);font-family:'Orbitron',sans-serif;
+  font-size:.8rem;letter-spacing:.15em;transition:.2s;
+}
+#new-project-btn:hover{border-color:rgba(139,92,246,.6);color:rgba(196,181,253,.9);}
+
+/* 새 프로젝트 모달 */
+#new-modal{display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,8,.88);backdrop-filter:blur(10px);
+  align-items:center;justify-content:center;}
+#new-modal.open{display:flex;}
+#new-box{width:min(92vw,460px);background:rgba(6,1,22,.98);
+  border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:2.2rem 2rem 1.8rem;}
+#new-box h2{font-size:1.2rem;font-weight:900;letter-spacing:.18em;color:#fff;margin-bottom:.4rem;text-shadow:0 0 20px #7c3aed;}
+#new-box p{font-size:.82rem;letter-spacing:.08em;color:rgba(196,181,253,.75);margin-bottom:1.4rem;line-height:1.8;}
+#nova-says{
+  background:rgba(109,40,217,.12);border:1px solid rgba(139,92,246,.25);
+  border-radius:10px;padding:.85rem 1rem;margin-bottom:1.2rem;
+  font-size:.82rem;letter-spacing:.04em;color:#e0d8ff;line-height:1.9;
+  min-height:44px;display:none;
+}
+#nova-says.show{display:block;}
+#prob-input{
+  width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(139,92,246,.28);
+  border-radius:10px;color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:.88rem;letter-spacing:.04em;padding:.8rem .9rem;
+  outline:none;resize:none;min-height:80px;line-height:1.8;transition:border-color .2s;
+  margin-bottom:1rem;
+}
+#prob-input:focus{border-color:rgba(167,139,250,.6);}
+#prob-input::placeholder{color:rgba(255,255,255,.35);}
+#create-btn{
+  width:100%;background:linear-gradient(135deg,#5b21b6,#7c3aed);
+  border:none;border-radius:10px;color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:.95rem;font-weight:700;letter-spacing:.12em;padding:.88rem;cursor:pointer;
+  transition:opacity .2s;margin-bottom:.6rem;
+}
+#create-btn:hover{opacity:.85;}#create-btn:disabled{opacity:.4;cursor:not-allowed;}
+#modal-cancel{width:100%;background:none;border:none;color:rgba(139,92,246,.55);
+  font-family:'Orbitron',sans-serif;font-size:.8rem;letter-spacing:.08em;cursor:pointer;padding:.3rem;}
+#modal-cancel:hover{color:rgba(167,139,250,.8);}
+#cluster-result{display:none;
+  background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.25);
+  border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;
+  font-size:.82rem;letter-spacing:.04em;color:rgba(52,211,153,.9);line-height:1.9;}
+#cluster-result.show{display:block;}
+
+/* 퀘스트 보드 */
+#quest-section{margin-bottom:2.4rem;}
+#quest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.7rem;}
+.quest-card{
+  background:rgba(10,4,30,.7);border:1px solid rgba(139,92,246,.18);
+  border-radius:12px;padding:1rem .9rem;position:relative;overflow:hidden;
+  transition:border-color .2s;
+}
+.quest-card.done{background:rgba(109,40,217,.1);border-color:rgba(139,92,246,.4);}
+.quest-card.done::after{
+  content:'✓';position:absolute;top:.5rem;right:.6rem;
+  font-size:.8rem;color:rgba(139,92,246,.75);
+}
+.quest-card.active{border-color:rgba(167,139,250,.3);cursor:pointer;}
+.quest-card.active:hover{border-color:rgba(167,139,250,.6);box-shadow:0 0 14px rgba(109,40,217,.2);}
+.quest-icon{font-size:1.3rem;margin-bottom:.5rem;}
+.quest-title{font-size:.78rem;font-weight:700;letter-spacing:.08em;color:#fff;margin-bottom:.3rem;line-height:1.4;}
+.quest-desc{font-size:.68rem;letter-spacing:.04em;color:rgba(196,181,253,.65);line-height:1.7;}
+.quest-reward{
+  margin-top:.55rem;font-size:.65rem;letter-spacing:.1em;
+  color:rgba(251,191,36,.8);display:inline-flex;align-items:center;gap:.3rem;
+}
+.quest-progress{
+  margin-top:.5rem;height:3px;background:rgba(139,92,246,.12);border-radius:1px;overflow:hidden;
+}
+.quest-progress-bar{height:100%;background:linear-gradient(90deg,#6d28d9,#a78bfa);border-radius:1px;transition:width .6s ease;}
+
+/* 클러스터 */
+#cluster-section{margin-bottom:2.4rem;}
+#cluster-card{
+  background:rgba(10,4,30,.7);border:1px solid rgba(139,92,246,.2);
+  border-radius:14px;padding:1.4rem;
+}
+#cluster-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
+#cluster-label{font-size:.88rem;font-weight:700;letter-spacing:.12em;color:#fff;}
+#cluster-count{font-size:.75rem;letter-spacing:.08em;color:rgba(196,181,253,.7);}
+#cluster-rank{margin-left:.6rem;font-size:.68rem;padding:.15rem .5rem;border-radius:20px;background:rgba(124,58,237,.25);border:1px solid rgba(124,58,237,.4);color:#c4b5fd;letter-spacing:.06em;}
+#cluster-desc{font-size:.78rem;letter-spacing:.04em;color:rgba(196,181,253,.65);line-height:1.9;margin-bottom:1.2rem;}
+#cluster-insight{
+  background:rgba(52,211,153,.05);border:1px solid rgba(52,211,153,.18);
+  border-radius:8px;padding:.8rem .9rem;margin-bottom:.8rem;
+}
+#cluster-insight p{font-size:.78rem;letter-spacing:.04em;color:rgba(52,211,153,.85);line-height:1.9;}
+#cluster-insight-title{font-size:.68rem;letter-spacing:.15em;color:rgba(52,211,153,.6);margin-bottom:.3rem;}
+#visit-cluster-btn{
+  font-size:.75rem;letter-spacing:.1em;
+  background:rgba(109,40,217,.2);border:1px solid rgba(139,92,246,.3);
+  border-radius:8px;color:#c4b5fd;font-family:'Orbitron',sans-serif;
+  padding:.45rem 1rem;cursor:pointer;transition:.2s;
+}
+#visit-cluster-btn:hover{background:rgba(109,40,217,.4);}
+#no-project-hint{
+  font-size:.8rem;letter-spacing:.08em;color:rgba(167,139,250,.55);
+  text-align:center;padding:1.4rem;border:1px dashed rgba(139,92,246,.15);border-radius:12px;
+}
+
+/* 별 성장 토스트 */
+#star-toast{
+  position:fixed;bottom:4.5rem;left:50%;transform:translateX(-50%) translateY(80px);
+  z-index:250;background:rgba(6,1,22,.97);border:1px solid rgba(139,92,246,.4);
+  border-radius:14px;padding:.9rem 1.5rem;text-align:center;
+  transition:transform .4s cubic-bezier(.22,1,.36,1),opacity .4s;opacity:0;
+}
+#star-toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+#star-toast-text{font-size:.82rem;letter-spacing:.1em;color:#c4b5fd;}
+#star-toast-sub{font-size:.72rem;letter-spacing:.08em;color:rgba(251,191,36,.85);margin-top:.3rem;}
+
+/* ─── 바텀 네비 ──────────────────────────────────────── */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  display:flex;height:60px;
+  background:rgba(0,0,10,.96);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(139,92,246,.3);
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;text-decoration:none;color:rgba(139,92,246,.55);
+  font-family:'Orbitron',sans-serif;transition:color .2s;position:relative;
+}
+.bnav-item:hover{color:rgba(196,181,253,.9);}
+.bnav-item.active{color:#fff;}
+.bnav-item.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:32px;height:2px;background:#8b5cf6;border-radius:0 0 4px 4px;
+  box-shadow:0 0 10px #8b5cf6;
+}
+.bnav-icon{font-size:1.2rem;line-height:1;}
+.bnav-text{font-size:.62rem;letter-spacing:.1em;font-weight:700;}
+</style>
+</head>
+<body>
+<!-- 월별 리포트 모달 -->
+<div id="monthly-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,5,.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+  <div style="background:linear-gradient(135deg,#0d0d1a,#130f2a);border:1px solid rgba(124,58,237,.35);border-radius:20px;padding:2rem 1.8rem;max-width:340px;width:90%;text-align:center;position:relative;">
+    <div style="font-size:1.8rem;margin-bottom:.5rem;">🌟</div>
+    <div style="font-family:'Orbitron',sans-serif;font-size:.82rem;letter-spacing:.12em;color:#c4b5fd;margin-bottom:1.4rem;">지난달 NOVA 활동 리포트</div>
+    <div id="report-stats" style="display:flex;flex-direction:column;gap:.7rem;margin-bottom:1.6rem;"></div>
+    <div id="report-msg" style="font-size:.72rem;color:rgba(196,181,253,.6);line-height:1.7;margin-bottom:1.4rem;"></div>
+    <button onclick="closeMonthlyReport()" style="font-family:'Orbitron',sans-serif;font-size:.65rem;letter-spacing:.15em;padding:.6rem 1.8rem;border-radius:12px;background:linear-gradient(135deg,#5b21b6,#7c3aed);border:none;color:#fff;cursor:pointer;">계속하기 ✦</button>
+  </div>
+</div>
+
+<canvas id="bg"></canvas>
+<nav id="bottom-nav">
+  <a href="/" class="bnav-item"><span class="bnav-icon">✦</span><span class="bnav-text">UNIVERSE</span></a>
+  <a href="/chat" class="bnav-item"><span class="bnav-icon">◎</span><span class="bnav-text">CHAT</span></a>
+  <a href="/project" class="bnav-item active"><span class="bnav-icon">⬡</span><span class="bnav-text">PROJECT</span></a>
+  <a href="/budget" class="bnav-item"><span class="bnav-icon">◈</span><span class="bnav-text">BUDGET</span></a>
+  <a href="/upgrade" class="bnav-item"><span class="bnav-icon">⬆</span><span class="bnav-text">UPGRADE</span></a>
+</nav>
+
+<!-- 새 프로젝트 모달 -->
+<!-- 성과 기록 모달 -->
+<div id="stat-modal">
+  <div id="stat-box">
+    <h2>📊 CONTENT STATS</h2>
+    <p id="stat-project-name"></p>
+    <div class="stat-field">
+      <label>PLATFORM</label>
+      <select id="stat-platform">
+        <option value="threads">Threads</option>
+        <option value="instagram">Instagram</option>
+        <option value="youtube">YouTube</option>
+        <option value="other">기타</option>
+      </select>
+    </div>
+    <div class="stat-field">
+      <label>콘텐츠 제목 (선택)</label>
+      <input id="stat-title" type="text" placeholder="포스트 제목..."/>
+    </div>
+    <div class="stat-row">
+      <div class="stat-field"><label>조회수</label><input id="stat-views" type="number" placeholder="0" min="0"/></div>
+      <div class="stat-field"><label>좋아요</label><input id="stat-likes" type="number" placeholder="0" min="0"/></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-field"><label>공유/리포스트</label><input id="stat-shares" type="number" placeholder="0" min="0"/></div>
+      <div class="stat-field"><label>댓글</label><input id="stat-comments" type="number" placeholder="0" min="0"/></div>
+    </div>
+    <button id="stat-submit">기록 저장</button>
+    <button id="stat-cancel">취소</button>
+  </div>
+</div>
+
+<div id="new-modal">
+  <div id="new-box">
+    <h2>새 프로젝트</h2>
+    <p>어떤 걸 자동화하거나 해결하고 싶으세요?<br>자유롭게 말씀해주세요.</p>
+    <textarea id="prob-input" placeholder="예: 매주 경쟁사 가격 체크하는 게 귀찮아요&#10;예: 고객 문의에 매번 같은 답변을 해야 해요&#10;예: 유튜브 댓글에서 자주 나오는 질문을 정리하고 싶어요" rows="3"></textarea>
+    <div id="nova-says"></div>
+    <div id="cluster-result"></div>
+    <button id="create-btn" onclick="createProject()">프로젝트 만들기 →</button>
+    <button id="modal-cancel" onclick="closeNewModal()">취소</button>
+  </div>
+</div>
+
+<!-- 별 성장 토스트 -->
+<div id="star-toast">
+  <div id="star-toast-text"></div>
+  <div id="star-toast-sub"></div>
+</div>
+
+<div id="app">
+  <!-- 헤더 -->
+  <div id="top-bar">
+    <div id="top-left">
+      <div id="top-orb"></div>
+      <div id="top-name">MY PROJECT</div>
+    </div>
+    <div id="top-right">
+    </div>
+  </div>
+
+  <!-- 프로젝트 -->
+  <div id="projects-section">
+    <div class="sec-title">PROJECTS</div>
+    <div id="projects-list"></div>
+    <button id="new-project-btn" onclick="openNewModal()">+ 새 프로젝트 추가</button>
+  </div>
+
+  <!-- 퀘스트 -->
+  <div id="quest-section">
+    <div class="sec-title">QUESTS <span style="font-size:.28rem;color:rgba(251,191,36,.5);letter-spacing:.1em;">완료 시 별 성장 ✦</span></div>
+    <div id="quest-grid"></div>
+  </div>
+
+  <!-- 클러스터 -->
+  <div id="cluster-section">
+    <div class="sec-title">CLUSTER</div>
+    <div id="cluster-card">
+      <div id="no-project-hint">프로젝트를 생성하면 같은 유형의 사람들과 연결됩니다</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── 배경 별 ─────────────────────────────────────────
+(function(){
+  const c=document.getElementById('bg'),ctx=c.getContext('2d');
+  function resize(){c.width=window.innerWidth;c.height=window.innerHeight;}
+  resize();window.addEventListener('resize',resize);
+  const stars=Array.from({length:500},()=>({x:Math.random(),y:Math.random(),r:Math.random()*.7,a:Math.random()*.5}));
+  (function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    stars.forEach(s=>{
+      s.a+=.0015*(Math.random()>.5?1:-1);s.a=Math.max(.05,Math.min(.5,s.a));
+      ctx.beginPath();ctx.arc(s.x*c.width,s.y*c.height,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(180,160,255,${s.a})`;ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// ─── 유저 ────────────────────────────────────────────
+const me = (() => { try { return JSON.parse(localStorage.getItem('nova_user')); } catch { return null; } })();
+if (!me) { location.href = '/login.html'; }
+const authHeader = () => ({ 'x-session-token': localStorage.getItem('nova_token') || '' });
+async function authFetch(url, options = {}) {
+  const res = await fetch(url, { ...options, headers: { ...options.headers, ...authHeader() } });
+  if (res.status === 401) {
+    localStorage.removeItem('nova_user');
+    localStorage.removeItem('nova_token');
+    location.href = '/login.html';
+    return null;
+  }
+  return res;
+}
+
+const orb = document.getElementById('top-orb');
+orb.style.background = `radial-gradient(circle at 35% 35%, ${me.star_color}cc, ${me.star_color}, #1e1b4b)`;
+orb.style.boxShadow = `0 0 14px ${me.star_color}88`;
+
+// ─── 토스트 ──────────────────────────────────────────
+function showToast(title, sub) {
+  const t = document.getElementById('star-toast');
+  document.getElementById('star-toast-text').textContent = title;
+  document.getElementById('star-toast-sub').textContent = sub;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ─── 퀘스트 렌더 ─────────────────────────────────────
+async function loadQuests() {
+  try {
+    const res = await fetch('/api/quest?user_id=' + encodeURIComponent(me.user_id));
+    const data = await res.json();
+    renderQuests(data.quests);
+    if (data.new_completions?.length) {
+      showToast('퀘스트 완료! ✦', '별이 성장했습니다');
+    }
+  } catch {}
+}
+
+function renderQuests(quests) {
+  const grid = document.getElementById('quest-grid');
+  grid.innerHTML = '';
+  quests.forEach(q => {
+    const div = document.createElement('div');
+    const isClickable = !q.completed && q.type === 'manual';
+    div.className = 'quest-card' + (q.completed ? ' done' : (isClickable ? ' active' : ''));
+    let progressHtml = '';
+    if (!q.completed && q.target && q.target > 1) {
+      const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+      progressHtml = `<div class="quest-progress"><div class="quest-progress-bar" style="width:${pct}%"></div></div>
+        <div style="font-size:.28rem;letter-spacing:.08em;color:rgba(167,139,250,.3);margin-top:.3rem">${q.progress}/${q.target}</div>`;
+    }
+    div.innerHTML = `
+      <div class="quest-icon">${q.icon}</div>
+      <div class="quest-title">${q.title}</div>
+      <div class="quest-desc">${q.desc}</div>
+      <div class="quest-reward">✦ +${q.reward.toFixed(2)} 별 성장</div>
+      ${progressHtml}
+    `;
+    if (isClickable) div.onclick = () => completeManualQuest(q.id, q.title, q.reward);
+    grid.appendChild(div);
+  });
+}
+
+async function completeManualQuest(quest_id, title, reward) {
+  try {
+    const res = await authFetch('/api/quest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: me.user_id, quest_id })
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (data.ok) {
+      showToast(`"${title}" 완료! ✦`, `별이 +${reward.toFixed(2)} 성장했습니다`);
+      loadQuests();
+    }
+  } catch {}
+}
+
+// ─── 프로젝트 렌더 ───────────────────────────────────
+async function loadProjects() {
+  try {
+    const res = await fetch('/api/project?user_id=' + encodeURIComponent(me.user_id));
+    const projects = await res.json();
+    renderProjects(projects);
+    if (projects.length > 0) renderCluster(projects[0].primary_tag);
+  } catch {}
+}
+
+function renderProjects(projects) {
+  const list = document.getElementById('projects-list');
+  list.innerHTML = '';
+  if (!projects.length) return;
+  const TAG_LABELS = {
+    content:'콘텐츠/크리에이터', ecommerce:'쇼핑/커머스', data:'데이터/분석',
+    customer:'고객/서비스', productivity:'생산성/업무', research:'학습/리서치',
+    marketing:'마케팅', other:'기타'
+  };
+  projects.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'project-card';
+    div.innerHTML = `
+      <div class="project-card-top">
+        <div class="project-title">${p.title}</div>
+        <span class="project-tag">${TAG_LABELS[p.primary_tag] || p.primary_tag}</span>
+      </div>
+      <div class="project-desc">${p.description || ''}</div>
+      <textarea class="project-notes-area" placeholder="진행 상황, 아이디어, 메모..." data-id="${p.id}">${p.notes || ''}</textarea>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;">
+        <button class="save-note-btn" data-id="${p.id}">노트 저장</button>
+        <button class="stat-btn" data-id="${p.id}">📊 성과 기록</button>
+      </div>
+      <div class="stat-mini" id="stat-mini-${p.id}"></div>
+    `;
+    loadStatMini(p.id);
+    div.querySelector('.stat-btn').onclick = () => openStatModal(p.id, p.title);
+    div.querySelector('.save-note-btn').onclick = async function() {
+      const notes = div.querySelector('.project-notes-area').value;
+      const res = await fetch('/api/project?id=' + p.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        body: JSON.stringify({ notes })
+      });
+      if ((await res.json()).ok) {
+        this.textContent = '저장됨 ✓';
+        setTimeout(() => this.textContent = '노트 저장', 1500);
+        // 퀘스트 q3(노트 작성) 완료
+        await fetch('/api/quest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: JSON.stringify({ user_id: me.user_id, quest_id: 'q3' })
+        }).catch(() => {});
+      }
+    };
+    list.appendChild(div);
+  });
+}
+
+// ─── 클러스터 렌더 ───────────────────────────────────
+const TAG_INSIGHTS = {
+  content:     '이 그룹에서 가장 효과적인 방식은 "훅 → 본문 → CTA" 구조입니다. 짧고 명확한 콘텐츠가 2.1배 반응률이 높아요.',
+  ecommerce:   '가격 모니터링 자동화를 사용하는 팀의 78%가 주간 리포트 형식으로 정리할 때 의사결정 속도가 빨라졌다고 답했습니다.',
+  data:        '데이터 수집 후 시각화까지 자동화한 사람들의 업무 시간이 평균 3.2시간/주 절약되었습니다.',
+  customer:    '자동 응답의 응답 속도를 5분 이내로 줄였을 때 고객 만족도가 평균 31% 향상되었습니다.',
+  productivity:'반복 업무를 자동화하면 하루 평균 1.8시간이 절약됩니다. 가장 많이 자동화되는 건 이메일 분류와 일정 조율입니다.',
+  research:    '정보 수집 자동화를 사용하는 리서처들은 요약 + 태그 분류 방식이 가장 효율적이라고 평가합니다.',
+  marketing:   'A/B 테스트를 자동화한 마케터의 광고 효율이 평균 22% 향상되었습니다. 소재 변형을 빠르게 실험하는 것이 핵심입니다.',
+  other:       '비슷한 문제를 가진 사람들과 솔루션을 공유할수록 프로젝트 완성률이 높아집니다.',
+};
+const TAG_LABELS = {
+  content:'콘텐츠/크리에이터', ecommerce:'쇼핑/커머스', data:'데이터/분석',
+  customer:'고객/서비스', productivity:'생산성/업무', research:'학습/리서치',
+  marketing:'마케팅', other:'기타'
+};
+
+async function renderCluster(primary_tag) {
+  const card = document.getElementById('cluster-card');
+  try {
+    const uid = me?.user_id ? `&user_id=${encodeURIComponent(me.user_id)}&cluster_rank=true` : '';
+    const res = await fetch(`/api/project?cluster_tag=${encodeURIComponent(primary_tag)}${uid}`);
+    const clusterData = await res.json();
+    const count = clusterData.count || 1;
+    const rank  = clusterData.rank;
+    const label = TAG_LABELS[primary_tag] || '기타';
+    const insight = TAG_INSIGHTS[primary_tag] || TAG_INSIGHTS.other;
+    const rankBadge = rank ? `<span id="cluster-rank">${count}명 중 ${rank}위 ${rank === 1 ? '🏆' : rank <= 3 ? '🥈' : '✦'}</span>` : '';
+
+    card.innerHTML = `
+      <div id="cluster-top">
+        <div id="cluster-label">${label} 클러스터</div>
+        <div id="cluster-count">같은 클러스터 ${count}명 ${rankBadge}</div>
+      </div>
+      <div id="cluster-desc">비슷한 문제를 해결하고 있는 사람들과 같은 클러스터에 있어요.<br>집단 데이터 기반 인사이트를 확인해보세요.</div>
+      <div id="cluster-insight">
+        <div id="cluster-insight-title">💡 ${label} 클러스터 인사이트</div>
+        <p>${insight}</p>
+      </div>
+      <button id="visit-cluster-btn" onclick="completeClusterQuest()">클러스터 탐험 완료 ✦</button>
+      <button id="vote-cluster-btn" onclick="toggleClusterVote('${primary_tag}')" style="
+        margin-left:.5rem;font-size:.38rem;letter-spacing:.15em;
+        background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);
+        border-radius:8px;color:rgba(251,191,36,.7);font-family:'Orbitron',sans-serif;
+        padding:.4rem .9rem;cursor:pointer;transition:.2s;
+      ">👍 나도 이 문제 있어요 · <span id="vote-count">-</span></button>
+    `;
+    loadClusterVote(primary_tag);
+  } catch {}
+}
+
+async function loadClusterVote(tag) {
+  try {
+    const res = await fetch(`/api/vote?target_type=cluster&target_id=${tag}&user_id=${encodeURIComponent(me.user_id)}`);
+    const d = await res.json();
+    const btn = document.getElementById('vote-cluster-btn');
+    document.getElementById('vote-count').textContent = d.count;
+    if (d.voted) btn.style.background = 'rgba(251,191,36,.2)';
+  } catch {}
+}
+
+async function toggleClusterVote(tag) {
+  const res = await authFetch('/api/vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: me.user_id, target_type: 'cluster', target_id: tag })
+  });
+  if (!res) return;
+  const d = await res.json();
+  const btn = document.getElementById('vote-cluster-btn');
+  if (d.action === 'added') {
+    btn.style.background = 'rgba(251,191,36,.2)';
+    document.getElementById('vote-count').textContent = parseInt(document.getElementById('vote-count').textContent || 0) + 1;
+  } else {
+    btn.style.background = 'rgba(251,191,36,.08)';
+    document.getElementById('vote-count').textContent = Math.max(0, parseInt(document.getElementById('vote-count').textContent || 1) - 1);
+  }
+}
+
+async function completeClusterQuest() {
+  await completeManualQuest('q6', '클러스터 탐험', 0.15);
+  document.getElementById('visit-cluster-btn').textContent = '탐험 완료 ✓';
+  document.getElementById('visit-cluster-btn').disabled = true;
+}
+
+// ─── 새 프로젝트 모달 ─────────────────────────────────
+function openNewModal() {
+  document.getElementById('prob-input').value = '';
+  document.getElementById('nova-says').className = 'hide';
+  document.getElementById('cluster-result').className = '';
+  document.getElementById('create-btn').disabled = false;
+  document.getElementById('create-btn').textContent = '프로젝트 만들기 →';
+  document.getElementById('new-modal').classList.add('open');
+  setTimeout(() => document.getElementById('prob-input').focus(), 300);
+}
+function closeNewModal() {
+  document.getElementById('new-modal').classList.remove('open');
+}
+document.getElementById('new-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('new-modal')) closeNewModal();
+});
+
+async function createProject() {
+  const desc = document.getElementById('prob-input').value.trim();
+  if (!desc) return;
+  const btn = document.getElementById('create-btn');
+  btn.disabled = true;
+  btn.textContent = 'NOVA 분석 중...';
+
+  const novaEl = document.getElementById('nova-says');
+  novaEl.textContent = '분석 중...';
+  novaEl.classList.add('show');
+
+  try {
+    const res = await authFetch('/api/project', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: me.user_id, description: desc })
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (data.error) { novaEl.textContent = data.error; btn.disabled = false; btn.textContent = '다시 시도'; return; }
+
+    novaEl.textContent = `"${data.project.title}" 프로젝트가 생성됐습니다! 🌱`;
+
+    const clusterEl = document.getElementById('cluster-result');
+    clusterEl.innerHTML = `<strong>${data.cluster.label}</strong> 클러스터 · 유사 프로젝트 ${data.cluster.count}개<br>같은 문제를 해결하고 있는 사람들이 있어요.`;
+    clusterEl.classList.add('show');
+
+    btn.textContent = '완료! 닫기';
+    btn.disabled = false;
+    btn.onclick = () => { closeNewModal(); loadProjects(); loadQuests(); showToast('프로젝트 생성 완료 ✦', '별이 +0.10 성장했습니다'); };
+  } catch {
+    novaEl.textContent = '오류가 발생했어요. 다시 시도해주세요.';
+    btn.disabled = false; btn.textContent = '다시 시도';
+  }
+}
+
+// ─── 월별 리포트 ─────────────────────────────────────
+async function checkMonthlyReport() {
+  if (!me?.user_id) return;
+  const key = `nova_report_${new Date().toISOString().slice(0, 7)}`;
+  if (localStorage.getItem(key)) return;
+
+  try {
+    const res = await fetch(`/api/user?id=${encodeURIComponent(me.user_id)}`);
+    const u = await res.json();
+    if (!u.last_month_count || u.last_month_count < 1) return;
+
+    const month = new Date();
+    month.setMonth(month.getMonth() - 1);
+    const monthLabel = `${month.getMonth() + 1}월`;
+
+    const msgs = [
+      { icon: '💬', label: `${monthLabel} 채팅`, value: `${u.last_month_count}회` },
+      { icon: '⭐', label: '현재 별 크기', value: `${(u.star_size || 1).toFixed(2)}` },
+      { icon: '🔗', label: '초대한 친구', value: `${u.invite_count || 0}명` },
+    ];
+
+    document.getElementById('report-stats').innerHTML = msgs.map(m => `
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        background:rgba(124,58,237,.1);border-radius:10px;padding:.6rem 1rem;font-size:.78rem;">
+        <span style="color:rgba(196,181,253,.7);">${m.icon} ${m.label}</span>
+        <span style="color:#fff;font-family:'Orbitron',sans-serif;font-size:.72rem;">${m.value}</span>
+      </div>`).join('');
+
+    const motivate = u.last_month_count >= 20 ? '지난달 정말 열심히 하셨어요! 이번 달도 함께해요 🚀'
+      : u.last_month_count >= 5 ? '꾸준히 쌓인 활동이 별을 키우고 있어요 ✦'
+      : '이번 달엔 더 자주 NOVA를 활용해보세요 💡';
+    document.getElementById('report-msg').textContent = motivate;
+
+    const modal = document.getElementById('monthly-modal');
+    modal.style.display = 'flex';
+  } catch {}
+}
+
+function closeMonthlyReport() {
+  document.getElementById('monthly-modal').style.display = 'none';
+  localStorage.setItem(`nova_report_${new Date().toISOString().slice(0, 7)}`, '1');
+}
+
+// ─── 초기화 ──────────────────────────────────────────
+loadProjects();
+loadQuests();
+checkMonthlyReport();
+
+// ─── 성과 기록 ────────────────────────────────────────
+let statProjectId = null;
+
+function openStatModal(projectId, projectTitle) {
+  statProjectId = projectId;
+  document.getElementById('stat-project-name').textContent = projectTitle;
+  document.getElementById('stat-title').value = '';
+  document.getElementById('stat-views').value = '';
+  document.getElementById('stat-likes').value = '';
+  document.getElementById('stat-shares').value = '';
+  document.getElementById('stat-comments').value = '';
+  document.getElementById('stat-modal').classList.add('open');
+}
+
+document.getElementById('stat-cancel').onclick = () =>
+  document.getElementById('stat-modal').classList.remove('open');
+
+document.getElementById('stat-submit').onclick = async function() {
+  if (!statProjectId) return;
+  this.disabled = true;
+  this.textContent = '저장 중...';
+  const res = await authFetch('/api/stats', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id:    me.user_id,
+      project_id: statProjectId,
+      platform:   document.getElementById('stat-platform').value,
+      title:      document.getElementById('stat-title').value,
+      views:      document.getElementById('stat-views').value   || 0,
+      likes:      document.getElementById('stat-likes').value   || 0,
+      shares:     document.getElementById('stat-shares').value  || 0,
+      comments:   document.getElementById('stat-comments').value|| 0,
+    })
+  });
+  if (!res) return;
+  if ((await res.json()).ok) {
+    document.getElementById('stat-modal').classList.remove('open');
+    loadStatMini(statProjectId);
+  }
+  this.disabled = false;
+  this.textContent = '기록 저장';
+};
+
+async function loadStatMini(projectId) {
+  const el = document.getElementById('stat-mini-' + projectId);
+  if (!el) return;
+  try {
+    const res = await fetch('/api/stats?project_id=' + projectId);
+    const data = await res.json();
+    if (!data.length) return;
+    const latest = data[0];
+    const totalViews = data.reduce((s, r) => s + (r.views || 0), 0);
+    const platEmoji = { threads:'🧵', instagram:'📸', youtube:'▶️', other:'📌' };
+    el.innerHTML = `
+      <span class="stat-chip">${platEmoji[latest.platform] || '📌'} ${latest.platform}</span>
+      <span class="stat-chip">👁 ${totalViews.toLocaleString()}</span>
+      <span class="stat-chip">기록 ${data.length}개</span>
+    `;
+  } catch {}
+}
+</script>
+</body>
+</html>

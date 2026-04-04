@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVA — 플랜 업그레이드</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<script src="https://js.tosspayments.com/v1/payment"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000005;color:#e2e8f0;font-family:'Orbitron',sans-serif;min-height:100vh;
+  padding:40px 20px 100px;display:flex;flex-direction:column;align-items:center;}
+
+h1{font-size:clamp(1.1rem,2.5vw,1.5rem);font-weight:900;letter-spacing:.35em;
+  color:#fff;text-shadow:0 0 30px #8b5cf6;margin-bottom:8px;text-align:center;}
+.sub{font-size:.78rem;letter-spacing:.18em;color:rgba(167,139,250,.7);margin-bottom:40px;text-align:center;}
+
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;
+  width:100%;max-width:640px;}
+
+.plan{background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.2);
+  border-radius:16px;padding:28px 24px;transition:border-color .2s,box-shadow .2s;cursor:pointer;}
+.plan:hover{border-color:rgba(139,92,246,.6);box-shadow:0 0 24px rgba(139,92,246,.15);}
+.plan.pro{border-color:rgba(192,132,252,.35);}
+.plan.pro:hover{border-color:#c084fc;box-shadow:0 0 32px rgba(192,132,252,.2);}
+
+.plan-badge{font-size:.65rem;letter-spacing:.25em;color:rgba(167,139,250,.8);margin-bottom:10px;}
+.plan-name{font-size:1.2rem;font-weight:700;letter-spacing:.2em;margin-bottom:6px;}
+.plan-name.starter{color:#6366f1;}
+.plan-name.pro{background:linear-gradient(135deg,#7c3aed,#c084fc);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;background-clip:text;}
+
+.plan-price{font-size:clamp(1.5rem,3vw,2rem);font-weight:900;color:#fff;margin:12px 0 4px;}
+.plan-price span{font-size:.8rem;font-weight:400;color:rgba(255,255,255,.5);letter-spacing:.1em;}
+
+.plan-limit{font-size:.75rem;letter-spacing:.1em;color:rgba(167,139,250,.8);margin-bottom:18px;}
+
+.plan-features{list-style:none;margin-bottom:24px;}
+.plan-features li{font-size:.72rem;letter-spacing:.08em;color:rgba(255,255,255,.7);
+  padding:6px 0;border-bottom:1px solid rgba(139,92,246,.08);}
+.plan-features li:last-child{border-bottom:none;}
+.plan-features li::before{content:'✦ ';color:rgba(139,92,246,.7);}
+
+.btn-pay{width:100%;padding:14px;border:none;border-radius:10px;font-family:'Orbitron',sans-serif;
+  font-size:.78rem;letter-spacing:.18em;font-weight:700;cursor:pointer;transition:opacity .2s;}
+.btn-pay.starter{background:#6366f1;color:#fff;}
+.btn-pay.pro{background:linear-gradient(135deg,#7c3aed,#c084fc);color:#fff;}
+.btn-pay:hover{opacity:.85;}
+.btn-pay:disabled{opacity:.4;cursor:not-allowed;}
+
+.current-plan{font-size:.7rem;letter-spacing:.12em;color:rgba(139,92,246,.8);
+  text-align:center;margin-top:28px;}
+
+.msg{margin-top:20px;font-size:.75rem;letter-spacing:.1em;text-align:center;min-height:20px;}
+.msg.ok{color:#34d399;}
+.msg.err{color:#f87171;}
+
+/* 바텀 네비 */
+nav.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:60px;
+  background:rgba(0,0,2,.95);border-top:1px solid rgba(139,92,246,.15);
+  display:flex;align-items:center;justify-content:space-around;z-index:100;}
+nav.bottom-nav a{display:flex;flex-direction:column;align-items:center;gap:3px;
+  text-decoration:none;color:rgba(167,139,250,.5);font-size:.42rem;letter-spacing:.12em;
+  padding:8px 12px;transition:color .2s;}
+nav.bottom-nav a:hover,nav.bottom-nav a.active{color:#c4b5fd;}
+nav.bottom-nav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.5;}
+</style>
+</head>
+<body>
+
+<h1>NOVA UPGRADE</h1>
+<p class="sub">더 많은 대화, 더 강력한 AI</p>
+
+<div class="plans">
+  <!-- 스타터 -->
+  <div class="plan starter">
+    <div class="plan-badge">STARTER</div>
+    <div class="plan-name starter">STARTER</div>
+    <div class="plan-price">₩4,900<span>/월</span></div>
+    <div class="plan-limit">일 50회 AI 대화</div>
+    <ul class="plan-features">
+      <li>일 50회 채팅 (무료의 10배)</li>
+      <li>프로젝트 무제한</li>
+      <li>별 성장 가속</li>
+      <li>채팅 히스토리 유지</li>
+    </ul>
+    <button class="btn-pay starter" onclick="startPayment('starter',4900)">스타터 시작하기</button>
+  </div>
+
+  <!-- 프로 -->
+  <div class="plan pro">
+    <div class="plan-badge">⭐ PRO</div>
+    <div class="plan-name pro">PRO</div>
+    <div class="plan-price">₩14,900<span>/월</span></div>
+    <div class="plan-limit">일 300회 AI 대화</div>
+    <ul class="plan-features">
+      <li>일 300회 채팅 (무료의 60배)</li>
+      <li>Claude Sonnet 우선 사용</li>
+      <li>프로젝트 무제한</li>
+      <li>별 최대 성장</li>
+      <li>채팅 히스토리 전체</li>
+    </ul>
+    <button class="btn-pay pro" onclick="startPayment('pro',14900)">프로 시작하기</button>
+  </div>
+</div>
+
+<p id="current-plan" class="current-plan"></p>
+<p id="msg" class="msg"></p>
+
+<nav class="bottom-nav">
+  <a href="/"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>UNIVERSE</a>
+  <a href="/output/chat/"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>CHAT</a>
+  <a href="/output/project/"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>PROJECT</a>
+  <a href="/output/budget/"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>BUDGET</a>
+  <a href="/output/upgrade/" class="active"><svg viewBox="0 0 24 24"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>UPGRADE</a>
+</nav>
+
+<script>
+const me = JSON.parse(localStorage.getItem('nova_user') || 'null');
+const CLIENT_KEY = 'test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq'; // TODO: 실 키로 교체
+
+if (!me) {
+  location.href = '/login.html?redirect=/output/upgrade/';
+}
+
+// 현재 플랜 표시
+if (me) {
+  const planLabel = me.plan_type === 'pro' ? '💜 Pro' : me.plan_type === 'starter' ? '💙 Starter' : '⚪ 무료';
+  document.getElementById('current-plan').textContent = `현재 플랜: ${planLabel}`;
+}
+
+function showMsg(text, ok) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+}
+
+async function startPayment(plan, amount) {
+  if (!me) { location.href = '/login.html'; return; }
+
+  const tossPayments = TossPayments(CLIENT_KEY);
+  const orderId = `NOVA-${plan.toUpperCase()}-${Date.now()}`;
+
+  try {
+    await tossPayments.requestPayment('카드', {
+      amount,
+      orderId,
+      orderName: `NOVA ${plan === 'pro' ? 'Pro' : 'Starter'} 구독 1개월`,
+      customerName: me.nickname || me.user_id,
+      successUrl: `${location.origin}/output/upgrade/success?plan=${plan}&user_id=${me.user_id}`,
+      failUrl: `${location.origin}/output/upgrade/?error=cancelled`,
+    });
+  } catch (e) {
+    showMsg(e.message || '결제를 취소했습니다.', false);
+  }
+}
+
+// URL 에러 파라미터 처리
+const params = new URLSearchParams(location.search);
+if (params.get('error') === 'cancelled') showMsg('결제가 취소됐습니다.', false);
+</script>
+</body>
+</html>

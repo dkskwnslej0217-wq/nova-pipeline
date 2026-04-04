@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVA — 투명 예산</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000005;color:#e2e8f0;font-family:'Orbitron',sans-serif;min-height:100vh;padding:40px 20px;}
+
+.back{position:fixed;top:20px;left:20px;z-index:10;
+  font-size:.8rem;letter-spacing:.15em;color:rgba(167,139,250,.75);
+  text-decoration:none;cursor:pointer;}
+.back:hover{color:#c4b5fd;}
+
+h1{text-align:center;font-size:clamp(1.1rem,2.5vw,1.6rem);font-weight:900;letter-spacing:.35em;
+  color:#fff;text-shadow:0 0 30px #8b5cf6;margin-bottom:6px;}
+.sub{text-align:center;font-size:.8rem;letter-spacing:.2em;color:rgba(167,139,250,.75);margin-bottom:40px;}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;max-width:900px;margin:0 auto 32px;}
+
+.card{background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.2);
+  border-radius:12px;padding:24px;}
+.card-title{font-size:.78rem;letter-spacing:.2em;color:rgba(196,181,253,.8);margin-bottom:14px;}
+.card-value{font-size:clamp(1.4rem,3vw,2rem);font-weight:700;color:#c4b5fd;margin-bottom:4px;}
+.card-desc{font-size:.75rem;letter-spacing:.1em;color:rgba(255,255,255,.55);}
+
+/* 플랜 분포 바 */
+.plan-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.plan-label{font-size:.75rem;letter-spacing:.08em;color:rgba(255,255,255,.7);width:70px;flex-shrink:0;}
+.plan-bar-wrap{flex:1;height:5px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
+.plan-bar{height:100%;border-radius:2px;transition:width .8s ease;}
+.plan-bar.free{background:rgba(139,92,246,.5);}
+.plan-bar.starter{background:#6366f1;}
+.plan-bar.pro{background:linear-gradient(90deg,#7c3aed,#c084fc);}
+.plan-count{font-size:.75rem;letter-spacing:.06em;color:rgba(255,255,255,.6);width:40px;text-align:right;flex-shrink:0;}
+
+/* 수익 배분 */
+.alloc-row{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-bottom:1px solid rgba(139,92,246,.1);}
+.alloc-row:last-child{border-bottom:none;}
+.alloc-label{font-size:.8rem;letter-spacing:.1em;color:rgba(255,255,255,.7);}
+.alloc-pct{font-size:.75rem;letter-spacing:.08em;color:rgba(167,139,250,.7);margin:0 12px;}
+.alloc-amount{font-size:.9rem;letter-spacing:.08em;color:#c4b5fd;font-weight:700;}
+
+/* 레벨 프로그레스 */
+.level-wrap{margin-top:12px;}
+.level-row{display:flex;justify-content:space-between;margin-bottom:8px;}
+.level-label{font-size:.78rem;letter-spacing:.1em;color:rgba(167,139,250,.85);}
+.level-next{font-size:.72rem;letter-spacing:.06em;color:rgba(255,255,255,.5);}
+.level-bar-wrap{height:4px;background:rgba(139,92,246,.12);border-radius:2px;overflow:hidden;}
+.level-bar{height:100%;background:linear-gradient(90deg,#6d28d9,#c084fc);
+  border-radius:2px;transition:width 1s ease;box-shadow:0 0 6px #7c3aed;}
+
+.model-badge{display:inline-block;padding:.35rem .9rem;border-radius:20px;
+  background:rgba(109,40,217,.2);border:1px solid rgba(139,92,246,.35);
+  font-size:.78rem;letter-spacing:.1em;color:#c4b5fd;margin-top:10px;}
+
+.footer{text-align:center;font-size:.72rem;letter-spacing:.15em;color:rgba(255,255,255,.3);margin-top:40px;}
+
+.loading{text-align:center;font-size:.85rem;letter-spacing:.2em;color:rgba(139,92,246,.5);padding:80px 0;}
+body{padding-bottom:80px;}
+
+/* ─── 바텀 네비 ──────────────────────────────────────── */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  display:flex;height:60px;
+  background:rgba(0,0,10,.96);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(139,92,246,.3);
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;text-decoration:none;color:rgba(139,92,246,.55);
+  font-family:'Orbitron',sans-serif;transition:color .2s;position:relative;
+}
+.bnav-item:hover{color:rgba(196,181,253,.9);}
+.bnav-item.active{color:#fff;}
+.bnav-item.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:32px;height:2px;background:#8b5cf6;border-radius:0 0 4px 4px;
+  box-shadow:0 0 10px #8b5cf6;
+}
+.bnav-icon{font-size:1.2rem;line-height:1;}
+.bnav-text{font-size:.62rem;letter-spacing:.1em;font-weight:700;}
+</style>
+</head>
+<body>
+<nav id="bottom-nav">
+  <a href="/" class="bnav-item"><span class="bnav-icon">✦</span><span class="bnav-text">UNIVERSE</span></a>
+  <a href="/chat" class="bnav-item"><span class="bnav-icon">◎</span><span class="bnav-text">CHAT</span></a>
+  <a href="/project" class="bnav-item"><span class="bnav-icon">⬡</span><span class="bnav-text">PROJECT</span></a>
+  <a href="/budget" class="bnav-item active"><span class="bnav-icon">◈</span><span class="bnav-text">BUDGET</span></a>
+  <a href="/upgrade" class="bnav-item"><span class="bnav-icon">⬆</span><span class="bnav-text">UPGRADE</span></a>
+</nav>
+
+<h1>TRANSPARENT BUDGET</h1>
+<p class="sub">NOVA의 수익과 비용을 투명하게 공개합니다</p>
+
+<div id="content"><div class="loading">LOADING...</div></div>
+
+<div class="footer">업데이트: 실시간 · 데이터 기준: Supabase</div>
+
+<script>
+async function load() {
+  const res = await fetch('/api/budget');
+  const d = await res.json();
+
+  const fmt = n => n.toLocaleString('ko-KR') + '원';
+  const levelNames = { 1:'Lv1 SEED', 2:'Lv2 ORBIT', 3:'Lv3 PULSAR', 4:'Lv4 QUASAR' };
+  const levelThresholds = [0, 50, 200, 500];
+  const levelMax =       [50, 200, 500, Infinity];
+
+  const lv = d.platformLevel;
+  const min = levelThresholds[lv - 1];
+  const max = levelMax[lv - 1];
+  const pct = max === Infinity ? 100 : Math.min(100, Math.round((d.totalUsers - min) / (max - min) * 100));
+  const nextLabel = lv < 4 ? `다음 레벨까지 ${levelMax[lv-1] - d.totalUsers}명` : 'MAX LEVEL';
+
+  const totalPlanUsers = d.totalUsers || 1;
+  const freePct  = Math.round(d.planCounts.free    / totalPlanUsers * 100);
+  const starPct  = Math.round(d.planCounts.starter / totalPlanUsers * 100);
+  const proPct   = Math.round(d.planCounts.pro     / totalPlanUsers * 100);
+
+  document.getElementById('content').innerHTML = `
+    <div class="grid">
+
+      <!-- 유저 현황 -->
+      <div class="card">
+        <div class="card-title">TOTAL USERS</div>
+        <div class="card-value">${d.totalUsers.toLocaleString()}</div>
+        <div class="card-desc">명이 NOVA를 사용 중</div>
+        <div class="level-wrap">
+          <div class="level-row">
+            <span class="level-label">${levelNames[lv]}</span>
+            <span class="level-next">${nextLabel}</span>
+          </div>
+          <div class="level-bar-wrap">
+            <div class="level-bar" id="lvBar" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="model-badge">${d.activeModelLabel}</div>
+      </div>
+
+      <!-- 플랜 분포 -->
+      <div class="card">
+        <div class="card-title">PLAN DISTRIBUTION</div>
+        <div class="plan-row">
+          <span class="plan-label">FREE</span>
+          <div class="plan-bar-wrap"><div class="plan-bar free" id="freeBar" style="width:0%"></div></div>
+          <span class="plan-count">${d.planCounts.free}명</span>
+        </div>
+        <div class="plan-row">
+          <span class="plan-label">STARTER</span>
+          <div class="plan-bar-wrap"><div class="plan-bar starter" id="starBar" style="width:0%"></div></div>
+          <span class="plan-count">${d.planCounts.starter}명</span>
+        </div>
+        <div class="plan-row">
+          <span class="plan-label">PRO</span>
+          <div class="plan-bar-wrap"><div class="plan-bar pro" id="proBar" style="width:0%"></div></div>
+          <span class="plan-count">${d.planCounts.pro}명</span>
+        </div>
+        <div class="card-desc" style="margin-top:10px">오늘 총 채팅: ${d.todayChats}회</div>
+      </div>
+
+      <!-- 월 수익 -->
+      <div class="card">
+        <div class="card-title">MONTHLY REVENUE (예상)</div>
+        <div class="card-value">${fmt(d.monthlyRevenue)}</div>
+        <div class="card-desc">스타터 ${d.planCounts.starter}명 × ₩4,900 + 프로 ${d.planCounts.pro}명 × ₩14,900</div>
+      </div>
+
+      <!-- 수익 배분 -->
+      <div class="card">
+        <div class="card-title">REVENUE ALLOCATION</div>
+        <div class="alloc-row">
+          <span class="alloc-label">junho (운영)</span>
+          <span class="alloc-pct">60%</span>
+          <span class="alloc-amount">${fmt(d.allocation.junho)}</span>
+        </div>
+        <div class="alloc-row">
+          <span class="alloc-label">API 비용</span>
+          <span class="alloc-pct">20%</span>
+          <span class="alloc-amount">${fmt(d.allocation.api)}</span>
+        </div>
+        <div class="alloc-row">
+          <span class="alloc-label">성장 펀드</span>
+          <span class="alloc-pct">20%</span>
+          <span class="alloc-amount">${fmt(d.allocation.growth)}</span>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // 애니메이션 딜레이
+  setTimeout(() => {
+    document.getElementById('lvBar').style.width   = pct + '%';
+    document.getElementById('freeBar').style.width  = freePct + '%';
+    document.getElementById('starBar').style.width  = starPct + '%';
+    document.getElementById('proBar').style.width   = proPct + '%';
+  }, 100);
+}
+
+load().catch(() => {
+  document.getElementById('content').innerHTML =
+    '<div class="loading" style="display:flex;flex-direction:column;align-items:center;gap:1.2rem">데이터 로드 실패.<button onclick="load()" style="background:rgba(109,40,217,.3);border:1px solid rgba(139,92,246,.4);color:#c4b5fd;font-family:\'Orbitron\',sans-serif;font-size:.78rem;letter-spacing:.12em;padding:.5rem 1.2rem;border-radius:8px;cursor:pointer">다시 시도</button></div>';
+});
+</script>
+</body>
+</html>

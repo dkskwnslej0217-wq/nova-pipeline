@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVA — WORKSPACE</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#000008;font-family:'Orbitron',sans-serif;overflow:hidden;}
+#bg{position:fixed;inset:0;z-index:0;}
+#app{position:relative;z-index:10;display:flex;flex-direction:column;height:100vh;}
+
+/* 헤더 */
+#header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:.8rem 1.4rem;border-bottom:1px solid rgba(139,92,246,.12);
+  background:rgba(0,0,8,.75);backdrop-filter:blur(12px);flex-shrink:0;
+}
+#header-left{display:flex;align-items:center;gap:.8rem;}
+#user-orb{width:32px;height:32px;border-radius:50%;flex-shrink:0;
+  box-shadow:0 0 16px rgba(139,92,246,.6);animation:pulse 3s ease-in-out infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 16px rgba(139,92,246,.6);}50%{box-shadow:0 0 28px rgba(167,139,250,.9),0 0 50px rgba(109,40,217,.4);}}
+#header-title{font-size:1rem;font-weight:900;letter-spacing:.25em;color:#fff;text-shadow:0 0 20px #7c3aed;}
+#header-sub{font-size:.7rem;letter-spacing:.2em;color:rgba(196,181,253,.8);margin-top:2px;}
+#header-right{display:flex;align-items:center;gap:.8rem;}
+#plan-badge{font-size:.7rem;letter-spacing:.15em;padding:.3rem .7rem;border-radius:20px;
+  border:1px solid rgba(139,92,246,.5);color:rgba(196,181,253,.9);}
+#plan-badge.pro{border-color:rgba(251,191,36,.6);color:rgba(251,191,36,.95);}
+#back-btn{font-size:.75rem;letter-spacing:.15em;color:rgba(167,139,250,.8);
+  text-decoration:none;border:1px solid rgba(139,92,246,.35);border-radius:6px;
+  padding:.35rem .75rem;transition:color .2s,border-color .2s;}
+#back-btn:hover{color:#c4b5fd;border-color:#8b5cf6;}
+
+/* 타인 프로필 뷰 */
+#profile-view{
+  flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;
+  padding:2rem;
+}
+#profile-orb{width:80px;height:80px;border-radius:50%;animation:pulse 3s ease-in-out infinite;}
+#profile-name{font-size:1.4rem;font-weight:900;letter-spacing:.3em;color:#fff;text-shadow:0 0 20px #7c3aed;}
+#profile-stats{display:flex;gap:2rem;}
+.stat{text-align:center;}
+.stat-val{font-size:.95rem;font-weight:700;color:#c4b5fd;}
+.stat-label{font-size:.7rem;letter-spacing:.18em;color:rgba(196,181,253,.75);margin-top:.3rem;}
+#profile-note{font-size:.8rem;letter-spacing:.1em;color:rgba(167,139,250,.7);margin-top:.5rem;}
+
+/* 메시지 영역 */
+#messages{flex:1;overflow-y:auto;padding:1.2rem 1.4rem;display:flex;flex-direction:column;gap:.8rem;}
+#messages::-webkit-scrollbar{width:3px;}
+#messages::-webkit-scrollbar-thumb{background:rgba(139,92,246,.3);border-radius:2px;}
+
+/* 메시지 버블 */
+.msg{display:flex;gap:.6rem;align-items:flex-start;max-width:75%;}
+.msg.user{align-self:flex-end;flex-direction:row-reverse;}
+.msg-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:2px;}
+.msg-avatar.nova{background:radial-gradient(circle at 35% 35%,#c4b5fd,#7c3aed,#312e81);box-shadow:0 0 10px rgba(139,92,246,.5);}
+.msg-avatar.user-av{background:rgba(139,92,246,.3);border:1px solid rgba(139,92,246,.4);}
+.msg-bubble{padding:.7rem 1rem;border-radius:12px;font-size:.95rem;line-height:1.8;letter-spacing:.02em;}
+.msg.nova .msg-bubble{background:rgba(109,40,217,.18);border:1px solid rgba(139,92,246,.18);color:rgba(255,255,255,.88);border-top-left-radius:2px;}
+.msg.user .msg-bubble{background:rgba(139,92,246,.25);border:1px solid rgba(167,139,250,.25);color:#fff;border-top-right-radius:2px;}
+
+/* 타이핑 */
+#typing{display:none;align-items:center;gap:.5rem;padding:.4rem 1.4rem;}
+#typing.show{display:flex;}
+.dot{width:5px;height:5px;border-radius:50%;background:#8b5cf6;animation:blink 1.4s ease-in-out infinite;}
+.dot:nth-child(2){animation-delay:.2s;}.dot:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
+
+/* 입력창 */
+#input-area{padding:.8rem 1.4rem 1.2rem;border-top:1px solid rgba(139,92,246,.1);background:rgba(0,0,8,.75);backdrop-filter:blur(12px);flex-shrink:0;padding-bottom:calc(.8rem + 60px);}
+#input-row{display:flex;gap:.6rem;align-items:flex-end;}
+#input{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(139,92,246,.35);border-radius:12px;
+  color:#fff;font-family:'Orbitron',sans-serif;font-size:.9rem;letter-spacing:.03em;
+  padding:.7rem 1rem;outline:none;resize:none;max-height:120px;transition:border-color .2s;line-height:1.6;}
+#input:focus{border-color:rgba(167,139,250,.7);}
+#input::placeholder{color:rgba(255,255,255,.4);}
+#send-btn{background:linear-gradient(135deg,#5b21b6,#7c3aed);border:none;border-radius:10px;
+  width:38px;height:38px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:opacity .2s;box-shadow:0 0 14px rgba(109,40,217,.4);}
+#send-btn:hover{opacity:.85;}#send-btn:disabled{opacity:.3;cursor:not-allowed;}
+#send-btn svg{width:16px;height:16px;fill:#fff;}
+
+/* 탭 */
+#chat-tabs{display:flex;gap:.5rem;padding:.6rem 1.4rem .2rem;flex-shrink:0;}
+.chat-tab{font-family:'Orbitron',sans-serif;font-size:.6rem;letter-spacing:.12em;padding:.35rem .9rem;border-radius:20px;border:1px solid rgba(124,58,237,.3);background:transparent;color:rgba(196,181,253,.5);cursor:pointer;transition:.2s;}
+.chat-tab.active{background:rgba(124,58,237,.25);border-color:rgba(124,58,237,.6);color:#c4b5fd;}
+/* 콘텐츠 보관함 */
+.vault-card{background:rgba(109,40,217,.1);border:1px solid rgba(124,58,237,.2);border-radius:12px;padding:1rem;font-size:.82rem;line-height:1.8;color:rgba(255,255,255,.85);white-space:pre-wrap;position:relative;}
+.vault-date{font-size:.62rem;color:rgba(196,181,253,.45);letter-spacing:.08em;margin-bottom:.5rem;}
+.vault-empty{text-align:center;color:rgba(196,181,253,.4);font-size:.78rem;padding:3rem 0;letter-spacing:.08em;}
+
+/* 한도 표시 */
+#limit-bar{display:flex;align-items:center;justify-content:space-between;
+  padding:.4rem 1.4rem;font-size:.75rem;letter-spacing:.1em;color:rgba(167,139,250,.75);}
+
+/* 업그레이드 배너 */
+#upgrade-bar{
+  display:none;align-items:center;justify-content:space-between;
+  padding:.55rem 1.4rem;
+  background:linear-gradient(90deg,rgba(109,40,217,.18),rgba(79,70,229,.12));
+  border-top:1px solid rgba(139,92,246,.2);
+}
+#upgrade-bar.show{display:flex;}
+#upgrade-msg{font-size:.85rem;letter-spacing:.08em;color:rgba(196,181,253,.9);}
+#upgrade-btn{
+  font-size:.85rem;letter-spacing:.08em;font-weight:700;
+  padding:.35rem .9rem;border-radius:20px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;
+  font-family:'Orbitron',sans-serif;white-space:nowrap;
+  transition:opacity .2s;box-shadow:0 0 12px rgba(109,40,217,.4);
+}
+#upgrade-btn:hover{opacity:.85;}
+
+/* 업그레이드 모달 */
+#upgrade-modal{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,8,.85);backdrop-filter:blur(10px);
+  align-items:center;justify-content:center;
+}
+#upgrade-modal.open{display:flex;}
+#upgrade-box{
+  width:min(92vw,440px);
+  background:rgba(6,1,22,0.98);
+  border:1px solid rgba(139,92,246,.3);
+  border-radius:20px;padding:2.2rem 1.8rem 1.8rem;
+  font-family:'Orbitron',sans-serif;
+}
+#upgrade-box h2{font-size:1.3rem;font-weight:900;letter-spacing:.2em;color:#fff;
+  text-align:center;margin-bottom:.4rem;text-shadow:0 0 20px #7c3aed;}
+#upgrade-box p{font-size:.85rem;letter-spacing:.08em;color:rgba(196,181,253,.8);
+  text-align:center;margin-bottom:1.6rem;}
+.plan-row{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:1.2rem;}
+.plan-card{border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:1.1rem .9rem;text-align:center;}
+.plan-card.hot{border-color:#7c3aed;background:rgba(109,40,217,.1);}
+.plan-name{font-size:.9rem;letter-spacing:.15em;color:#c4b5fd;margin-bottom:.4rem;}
+.plan-price{font-size:1.3rem;font-weight:900;color:#fff;margin-bottom:.5rem;}
+.plan-limit{font-size:.8rem;color:rgba(196,181,253,.75);letter-spacing:.05em;line-height:1.8;}
+.plan-hot-badge{font-size:.7rem;letter-spacing:.08em;
+  background:#7c3aed;color:#fff;padding:.15rem .6rem;border-radius:10px;
+  display:inline-block;margin-bottom:.4rem;}
+#upgrade-contact{
+  width:100%;background:linear-gradient(135deg,#5b21b6,#7c3aed);
+  border:none;border-radius:10px;color:#fff;
+  font-family:'Orbitron',sans-serif;font-size:1rem;
+  font-weight:700;letter-spacing:.1em;padding:.85rem;cursor:pointer;
+  transition:opacity .2s;margin-bottom:.6rem;
+}
+#upgrade-contact:hover{opacity:.85;}
+#upgrade-close{
+  width:100%;background:none;border:none;
+  color:rgba(167,139,250,.6);font-family:'Orbitron',sans-serif;
+  font-size:.8rem;letter-spacing:.08em;cursor:pointer;padding:.3rem;
+}
+#upgrade-close:hover{color:rgba(196,181,253,.9);}
+
+/* ─── 바텀 네비 ──────────────────────────────────────── */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  display:flex;height:60px;
+  background:rgba(0,0,10,.96);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(139,92,246,.3);
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;text-decoration:none;color:rgba(139,92,246,.55);
+  font-family:'Orbitron',sans-serif;transition:color .2s;position:relative;
+}
+.bnav-item:hover{color:rgba(196,181,253,.9);}
+.bnav-item.active{color:#fff;}
+.bnav-item.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:32px;height:2px;background:#8b5cf6;border-radius:0 0 4px 4px;
+  box-shadow:0 0 10px #8b5cf6;
+}
+.bnav-icon{font-size:1.2rem;line-height:1;}
+.bnav-text{font-size:.62rem;letter-spacing:.1em;font-weight:700;}
+</style>
+</head>
+<body>
+<!-- 업그레이드 모달 -->
+<div id="upgrade-modal">
+  <div id="upgrade-box">
+    <h2>플랜 업그레이드</h2>
+    <p>더 많은 대화를 원하신다면</p>
+    <div class="plan-row">
+      <div class="plan-card">
+        <div class="plan-name">STARTER</div>
+        <div class="plan-price">₩4,900<span style="font-size:.38rem;color:rgba(167,139,250,.4)">/월</span></div>
+        <div class="plan-limit">50회/일<br>기본 AI 모델</div>
+      </div>
+      <div class="plan-card hot">
+        <div class="plan-hot-badge">POPULAR</div>
+        <div class="plan-name">PRO</div>
+        <div class="plan-price">₩14,900<span style="font-size:.38rem;color:rgba(167,139,250,.4)">/월</span></div>
+        <div class="plan-limit">300회/일<br>최상위 AI 모델</div>
+      </div>
+    </div>
+    <button id="upgrade-contact" onclick="contactUpgrade()">구매 문의하기 →</button>
+    <button id="upgrade-close" onclick="closeUpgrade()">나중에 할게요</button>
+  </div>
+</div>
+
+<canvas id="bg"></canvas>
+<div id="app">
+  <div id="header">
+    <div id="header-left">
+      <div id="user-orb"></div>
+      <div>
+        <div id="header-title">WORKSPACE</div>
+        <div id="header-sub">NOVA AI ASSISTANT</div>
+      </div>
+    </div>
+    <div id="header-right">
+      <span id="plan-badge">FREE</span>
+    </div>
+  </div>
+
+  <!-- 타인 프로필 뷰 -->
+  <div id="profile-view">
+    <div id="profile-orb"></div>
+    <div id="profile-name"></div>
+    <div id="profile-stats">
+      <div class="stat"><div class="stat-val" id="stat-plan">—</div><div class="stat-label">PLAN</div></div>
+      <div class="stat"><div class="stat-val" id="stat-invites">0</div><div class="stat-label">INVITES</div></div>
+      <div class="stat"><div class="stat-val" id="stat-size">1.0</div><div class="stat-label">STAR SIZE</div></div>
+    </div>
+    <div id="profile-note">이 별의 주인만 NOVA와 대화할 수 있습니다</div>
+  </div>
+
+  <!-- 탭 -->
+  <div id="chat-tabs">
+    <button class="chat-tab active" onclick="switchTab('chat')" id="tab-chat">대화</button>
+    <button class="chat-tab" onclick="switchTab('content')" id="tab-content">콘텐츠 보관함</button>
+  </div>
+
+  <!-- 채팅 뷰 -->
+  <div id="messages"></div>
+
+  <!-- 콘텐츠 보관함 뷰 -->
+  <div id="content-vault" style="display:none;flex:1;overflow-y:auto;padding:1.2rem 1.4rem;display:flex;flex-direction:column;gap:1rem;"></div>
+  <div id="typing">
+    <div class="msg-avatar nova"></div>
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+  </div>
+  <div id="limit-bar">
+    <span id="limit-text"></span>
+    <span id="limit-count"></span>
+  </div>
+  <div id="upgrade-bar">
+    <span id="upgrade-msg">오늘 대화 한도에 도달했어요</span>
+    <button id="upgrade-btn" onclick="openUpgrade()">플랜 업그레이드 →</button>
+  </div>
+  <div id="input-area">
+    <div id="input-row">
+      <textarea id="input" placeholder="NOVA에게 물어보세요..." rows="1"></textarea>
+      <button id="send-btn" disabled>
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<nav id="bottom-nav">
+  <a href="/" class="bnav-item"><span class="bnav-icon">✦</span><span class="bnav-text">UNIVERSE</span></a>
+  <a href="/chat" class="bnav-item active"><span class="bnav-icon">◎</span><span class="bnav-text">CHAT</span></a>
+  <a href="/project" class="bnav-item"><span class="bnav-icon">⬡</span><span class="bnav-text">PROJECT</span></a>
+  <a href="/budget" class="bnav-item"><span class="bnav-icon">◈</span><span class="bnav-text">BUDGET</span></a>
+  <a href="/upgrade" class="bnav-item"><span class="bnav-icon">⬆</span><span class="bnav-text">UPGRADE</span></a>
+</nav>
+
+<script>
+// ─── 업그레이드 모달 ──────────────────────────────────
+function openUpgrade(){ document.getElementById('upgrade-modal').classList.add('open'); }
+function closeUpgrade(){ document.getElementById('upgrade-modal').classList.remove('open'); }
+function contactUpgrade(){
+  const me = (() => { try { return JSON.parse(localStorage.getItem('nova_user')); } catch { return null; } })();
+  const nick = me?.nickname || '';
+  window.open('mailto:contact@nova-universe.ai?subject=플랜%20업그레이드%20문의&body=닉네임:%20' + encodeURIComponent(nick), '_blank');
+}
+document.addEventListener('click', e => {
+  if (e.target === document.getElementById('upgrade-modal')) closeUpgrade();
+});
+
+// ─── 배경 별 ───────────────────────────────────────────
+(function(){
+  const c=document.getElementById('bg'),ctx=c.getContext('2d');
+  c.width=window.innerWidth;c.height=window.innerHeight;
+  const stars=Array.from({length:600},()=>({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*.8,a:Math.random()*.6}));
+  (function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    stars.forEach(s=>{s.a+=.002*(Math.random()>.5?1:-1);s.a=Math.max(.05,Math.min(.6,s.a));ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(180,160,255,${s.a})`;ctx.fill();});
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// ─── 초기화 ───────────────────────────────────────────
+let urlId = new URLSearchParams(location.search).get('id');
+const stored = localStorage.getItem('nova_user');
+let me = null;
+try { me = stored ? JSON.parse(stored) : null; } catch {}
+
+// ?id 없으면 본인 페이지로 리다이렉트 (replaceState로 튕김 방지)
+if (!urlId) {
+  if (me) { urlId = me.user_id; history.replaceState(null, '', '/chat?id=' + me.user_id); }
+  else { location.href = '/login'; }
+}
+
+const isOwner = me && me.user_id === urlId;
+
+// ─── 유저 프로필 로드 ──────────────────────────────────
+async function loadProfile() {
+  try {
+    const res = await fetch('/api/user?id=' + encodeURIComponent(urlId));
+    if (!res.ok) { location.href = '/'; return null; }
+    return await res.json();
+  } catch { return null; }
+}
+
+// ─── 채팅 히스토리 로드 ────────────────────────────────
+async function loadHistory() {
+  try {
+    const token = localStorage.getItem('nova_token') || '';
+    const res = await fetch('/api/history?user_id=' + encodeURIComponent(urlId), {
+      headers: { 'x-session-token': token }
+    });
+    if (res.status === 401) { localStorage.removeItem('nova_user'); localStorage.removeItem('nova_token'); location.href = '/login.html'; return []; }
+    const data = res.ok ? await res.json() : [];
+    _vaultHistory = data;
+    return data;
+  } catch { return []; }
+}
+
+// ─── 탭 전환 ──────────────────────────────────────────
+function switchTab(tab) {
+  const isChat = tab === 'chat';
+  document.getElementById('tab-chat').classList.toggle('active', isChat);
+  document.getElementById('tab-content').classList.toggle('active', !isChat);
+  document.getElementById('messages').style.display = isChat ? 'flex' : 'none';
+  document.getElementById('content-vault').style.display = isChat ? 'none' : 'flex';
+  document.getElementById('input-area').style.display = isChat ? '' : 'none';
+  if (!isChat) renderVault();
+}
+
+// ─── 콘텐츠 보관함 렌더 ───────────────────────────────
+let _vaultHistory = [];
+function renderVault() {
+  const vault = document.getElementById('content-vault');
+  // 100자 이상 AI 답변만 = 콘텐츠로 간주
+  const contents = _vaultHistory.filter(h => h.role !== 'user' && (h.content || '').length >= 100);
+  if (!contents.length) {
+    vault.innerHTML = '<div class="vault-empty">아직 저장된 콘텐츠가 없어요.<br>NOVA에게 스크립트나 마케팅 문구를 요청해보세요.</div>';
+    return;
+  }
+  vault.innerHTML = contents.map(h => {
+    const date = h.created_at ? new Date(h.created_at).toLocaleDateString('ko-KR') : '';
+    const preview = h.content.slice(0, 300) + (h.content.length > 300 ? '...' : '');
+    return `<div class="vault-card"><div class="vault-date">${date}</div>${preview}</div>`;
+  }).reverse().join('');
+}
+
+// ─── 메시지 저장 ───────────────────────────────────────
+async function saveMsg(role, content) {
+  try {
+    const token = localStorage.getItem('nova_token') || '';
+    await fetch('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+      body: JSON.stringify({ user_id: urlId, role, content })
+    });
+  } catch {}
+}
+
+// ─── UI 렌더 ──────────────────────────────────────────
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send-btn');
+const typingEl = document.getElementById('typing');
+
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'user' : 'nova');
+  const safeText = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  const shareBtn = role === 'nova' && text.length > 30
+    ? `<button onclick="shareMsg(this)" data-text="${text.replace(/"/g,'&quot;')}" style="margin-top:.5rem;display:block;background:none;border:1px solid rgba(139,92,246,.25);border-radius:6px;color:rgba(167,139,250,.6);font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.1em;padding:.2rem .6rem;cursor:pointer;" onmouseover="this.style.color='#c4b5fd'" onmouseout="this.style.color='rgba(167,139,250,.6)'">공유</button>`
+    : '';
+  div.innerHTML = `<div class="msg-avatar ${role==='user'?'user-av':'nova'}"></div><div class="msg-bubble">${safeText}${shareBtn}</div>`;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function shareMsg(btn) {
+  const text = btn.getAttribute('data-text');
+  const shareText = `NOVA AI 답변:\n\n${text}\n\n— NOVA UNIVERSE (my-project-xi-sand-93.vercel.app)`;
+  if (navigator.share) {
+    navigator.share({ text: shareText }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(shareText).then(() => {
+      btn.textContent = '복사됨 ✓';
+      setTimeout(() => btn.textContent = '공유', 1500);
+    });
+  }
+}
+
+// ─── 메인 ────────────────────────────────────────────
+(async () => {
+  const profile = await loadProfile();
+  if (!profile) return;
+
+  // 헤더 세팅
+  const orb = document.getElementById('user-orb');
+  orb.style.background = `radial-gradient(circle at 35% 35%, ${profile.star_color}cc, ${profile.star_color}, #1e1b4b)`;
+  orb.style.boxShadow = `0 0 16px ${profile.star_color}88`;
+  document.getElementById('header-title').textContent = profile.nickname + "'S WORKSPACE";
+
+  const badge = document.getElementById('plan-badge');
+  badge.textContent = (profile.plan_type || 'free').toUpperCase();
+  if (profile.plan_type === 'pro') badge.classList.add('pro');
+
+  // 초기 limit-bar
+  if (isOwner && profile.daily_count !== undefined) {
+    const limits = { free: 30, starter: 100, pro: 500 };
+    const lim = limits[profile.plan_type] ?? 30;
+    updateLimitBar(profile.daily_count ?? 0, lim);
+  }
+
+  if (!isOwner) {
+    // 타인 프로필 뷰
+    document.getElementById('messages').style.display = 'none';
+    document.getElementById('typing').style.display = 'none';
+    document.getElementById('limit-bar').style.display = 'none';
+    document.getElementById('input-area').style.display = 'none';
+    document.getElementById('profile-view').style.display = 'flex';
+
+    const pOrb = document.getElementById('profile-orb');
+    pOrb.style.background = `radial-gradient(circle at 35% 35%, ${profile.star_color}cc, ${profile.star_color}, #1e1b4b)`;
+    pOrb.style.boxShadow = `0 0 24px ${profile.star_color}88`;
+    document.getElementById('profile-name').textContent = profile.nickname;
+    document.getElementById('stat-plan').textContent = (profile.plan_type || 'FREE').toUpperCase();
+    document.getElementById('stat-invites').textContent = profile.invite_count || 0;
+    document.getElementById('stat-size').textContent = profile.star_size || '1.0';
+    return;
+  }
+
+  // limit-bar 업데이트
+  function updateLimitBar(count, limit) {
+    document.getElementById('limit-text').textContent = '오늘 사용량';
+    const remaining = Math.max(0, limit - count);
+    const pct = limit > 0 ? count / limit : 0;
+    const el = document.getElementById('limit-count');
+    el.textContent = `${count} / ${limit}회`;
+    el.style.color = remaining === 0 ? '#f87171' : pct >= 0.8 ? '#fbbf24' : 'rgba(139,92,246,.5)';
+    // 80% 이상 — 업그레이드 넛지 배너 표시
+    const upgradeBar = document.getElementById('upgrade-bar');
+    const upgradeMsg = document.getElementById('upgrade-msg');
+    if (pct >= 0.8 && remaining > 0) {
+      upgradeMsg.textContent = `오늘 한도의 ${Math.round(pct*100)}% 사용했어요. 더 쓰려면 업그레이드하세요.`;
+      upgradeBar.classList.add('show');
+    }
+  }
+
+  // 본인 워크스페이스 — 히스토리 로드
+  const history = await loadHistory();
+  const conversationHistory = [];
+
+  if (history.length === 0) {
+    addMsg('nova', '안녕하세요, ' + profile.nickname + '님.\n저는 NOVA입니다. 무엇이든 물어보세요.');
+  } else {
+    history.forEach(h => {
+      addMsg(h.role === 'user' ? 'user' : 'nova', h.content);
+      conversationHistory.push({ role: h.role, content: h.content });
+    });
+  }
+
+  // 입력 이벤트
+  inputEl.addEventListener('input', () => {
+    sendBtn.disabled = !inputEl.value.trim();
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px';
+  });
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) send(); }
+  });
+  sendBtn.onclick = send;
+
+  let limitReached = false;
+
+  async function send() {
+    const text = inputEl.value.trim();
+    if (!text || limitReached) return;
+    inputEl.value = ''; inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    typingEl.classList.add('show');
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+      const token = localStorage.getItem('nova_token') || '';
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+        body: JSON.stringify({ message: text, history: conversationHistory.slice(-10), user_id: me?.user_id ?? null })
+      });
+      if (res.status === 401) {
+        localStorage.removeItem('nova_user');
+        localStorage.removeItem('nova_token');
+        location.href = '/login';
+        return;
+      }
+
+      const data = await res.json();
+      typingEl.classList.remove('show');
+
+      if (data.limit_exceeded) {
+        updateLimitBar(data.count, data.limit);
+        addMsg('nova', data.error);
+        limitReached = true;
+        inputEl.disabled = true;
+        sendBtn.disabled = true;
+        document.getElementById('upgrade-bar').classList.add('show');
+        return;
+      }
+
+      if (data.usage) updateLimitBar(data.usage.count, data.usage.limit);
+      const reply = data.reply || data.error || '응답을 받지 못했어요.';
+
+      // 성공 시에만 히스토리 기록
+      addMsg('user', text);
+      conversationHistory.push({ role: 'user', content: text });
+      addMsg('nova', reply);
+      conversationHistory.push({ role: 'assistant', content: reply });
+
+      await saveMsg('user', text);
+      await saveMsg('assistant', reply);
+    } catch {
+      typingEl.classList.remove('show');
+      addMsg('nova', '연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.');
+    }
+  }
+})();
+</script>
+</body>
+</html>

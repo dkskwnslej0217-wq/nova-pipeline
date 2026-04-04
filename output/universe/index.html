@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVA UNIVERSE</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#02000a;overflow:hidden;font-family:'Orbitron',sans-serif}
+canvas{display:block;position:fixed;top:0;left:0;z-index:1}
+
+/* 행성 라벨 */
+.planet-label{
+  position:fixed;pointer-events:all;z-index:5;
+  transform:translate(-50%,-50%);text-align:center;
+  cursor:pointer;
+}
+.planet-label .name{
+  color:rgba(255,255,255,.85);
+  font-size:clamp(.55rem,.8vw,.75rem);
+  font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+  text-shadow:0 0 10px currentColor;display:block;
+  font-family:'Orbitron',sans-serif;
+}
+
+/* UI 레이어 */
+#ui{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  z-index:10;pointer-events:none;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:clamp(10px,2vw,20px);
+}
+#title{
+  font-size:clamp(1.8rem,5vw,4rem);
+  font-weight:900;letter-spacing:.2em;
+  color:#fff;
+  text-shadow:0 0 30px #7c3aed,0 0 60px #4f46e5,0 0 90px #7c3aed;
+  animation:glow 3s ease-in-out infinite alternate;
+}
+@keyframes glow{
+  from{text-shadow:0 0 20px #7c3aed,0 0 40px #4f46e5,0 0 60px #7c3aed,0 0 120px #4f46e5}
+  to{text-shadow:0 0 40px #a78bfa,0 0 80px #7c3aed,0 0 120px #4f46e5}
+}
+#subtitle{
+  font-size:clamp(.6rem,1.2vw,1rem);
+  letter-spacing:.4em;color:rgba(167,139,250,.7);
+  font-weight:400;
+}
+#search-wrap{
+  pointer-events:all;
+  display:flex;align-items:center;gap:0;
+  margin-top:clamp(10px,2vw,20px);
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(167,139,250,0.6);
+  border-radius:50px;
+  padding:4px 4px 4px 24px;
+  backdrop-filter:blur(30px);
+  width:clamp(260px,40vw,480px);
+  transition:border-color .3s,box-shadow .3s;
+}
+#search-wrap:focus-within{
+  border-color:rgba(124,58,237,.8);
+  box-shadow:0 0 20px rgba(124,58,237,.3);
+}
+#search-input{
+  flex:1;background:none;border:none;outline:none;
+  color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:clamp(.65rem,.9vw,.85rem);letter-spacing:.05em;
+}
+#search-input::placeholder{color:rgba(255,255,255,.25)}
+#enter-btn{
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);
+  border:none;border-radius:50px;
+  color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:clamp(.6rem,.8vw,.75rem);font-weight:700;
+  letter-spacing:.1em;cursor:pointer;
+  padding:clamp(8px,1.2vw,12px) clamp(14px,2vw,24px);
+  transition:opacity .2s,transform .1s;
+}
+#enter-btn:hover{opacity:.85;transform:scale(1.03)}
+#enter-btn:active{transform:scale(.97)}
+
+/* 워프 오버레이 */
+#warp{
+  position:fixed;inset:0;z-index:20;pointer-events:none;
+  background:radial-gradient(ellipse at center,#7c3aed 0%,#000 70%);
+  opacity:0;transition:opacity .25s;
+}
+
+/* AI 응답 패널 */
+#ai-panel{
+  position:fixed;bottom:-320px;left:50%;transform:translateX(-50%);
+  width:min(520px,92vw);
+  background:rgba(8,4,24,0.97);
+  border:1px solid rgba(167,139,250,0.35);
+  border-bottom:none;
+  border-radius:20px 20px 0 0;
+  padding:1.6rem 1.8rem 2rem;
+  backdrop-filter:blur(40px);
+  z-index:150;
+  transition:bottom .45s cubic-bezier(.22,1,.36,1);
+  font-family:'Orbitron',sans-serif;
+  pointer-events:all;
+}
+#ai-panel.open{ bottom:0; }
+#ai-handle{width:36px;height:3px;background:rgba(167,139,250,.35);border-radius:2px;margin:0 auto 1.2rem;}
+#ai-query-label{
+  font-size:.5rem;letter-spacing:.25em;color:rgba(167,139,250,.5);margin-bottom:.4rem;
+}
+#ai-query-text{
+  font-size:.7rem;letter-spacing:.08em;color:rgba(255,255,255,.5);
+  margin-bottom:1rem;font-style:italic;
+}
+#ai-response{
+  font-size:.72rem;letter-spacing:.06em;color:#e0d8ff;
+  line-height:1.9;min-height:48px;margin-bottom:1.4rem;
+  word-break:keep-all;
+}
+#ai-response.loading::after{
+  content:'';display:inline-block;
+  width:6px;height:6px;border-radius:50%;
+  background:#a78bfa;
+  animation:blink .8s infinite;
+  vertical-align:middle;margin-left:6px;
+}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+#ai-cta-row{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;}
+#ai-cta-btn{
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);
+  border:none;border-radius:50px;
+  color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:.62rem;font-weight:700;letter-spacing:.12em;
+  padding:.7rem 1.4rem;cursor:pointer;
+  transition:opacity .2s,transform .1s;white-space:nowrap;
+}
+#ai-cta-btn:hover{opacity:.85;transform:scale(1.03)}
+#ai-close-btn{
+  background:none;border:1px solid rgba(167,139,250,.25);
+  border-radius:50px;color:rgba(167,139,250,.6);
+  font-family:'Orbitron',sans-serif;font-size:.55rem;
+  letter-spacing:.1em;padding:.65rem 1rem;cursor:pointer;
+  transition:border-color .2s;
+}
+#ai-close-btn:hover{border-color:rgba(167,139,250,.6);}
+
+/* 이메일 수집 모달 */
+#signup-modal{
+  position:fixed;inset:0;z-index:300;
+  background:rgba(2,0,10,.85);backdrop-filter:blur(12px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .3s;
+}
+#signup-modal.open{opacity:1;pointer-events:all;}
+#signup-box{
+  width:min(420px,90vw);
+  background:rgba(10,5,28,0.98);
+  border:1px solid rgba(167,139,250,.35);
+  border-radius:20px;padding:2.2rem 2rem 2rem;
+  font-family:'Orbitron',sans-serif;
+  transform:translateY(20px);transition:transform .35s cubic-bezier(.22,1,.36,1);
+}
+#signup-modal.open #signup-box{transform:translateY(0);}
+#signup-title{
+  font-size:clamp(.9rem,2vw,1.1rem);font-weight:700;
+  letter-spacing:.15em;color:#fff;margin-bottom:.4rem;
+}
+#signup-sub{
+  font-size:.58rem;letter-spacing:.12em;color:rgba(167,139,250,.6);
+  margin-bottom:1.6rem;line-height:1.7;
+}
+.sfield{
+  width:100%;background:rgba(255,255,255,.04);
+  border:1px solid rgba(167,139,250,.2);border-radius:10px;
+  color:#fff;font-family:'Orbitron',sans-serif;
+  font-size:.65rem;letter-spacing:.05em;
+  padding:.75rem 1rem;margin-bottom:.8rem;
+  outline:none;transition:border-color .2s;box-sizing:border-box;
+}
+.sfield:focus{border-color:rgba(124,58,237,.7);}
+.sfield::placeholder{color:rgba(255,255,255,.2);}
+#signup-submit{
+  width:100%;background:linear-gradient(135deg,#7c3aed,#4f46e5);
+  border:none;border-radius:10px;color:#fff;
+  font-family:'Orbitron',sans-serif;font-size:.68rem;
+  font-weight:700;letter-spacing:.12em;
+  padding:.85rem;cursor:pointer;
+  transition:opacity .2s,transform .1s;margin-bottom:.7rem;
+}
+#signup-submit:hover{opacity:.85;}
+#signup-submit:active{transform:scale(.98);}
+#signup-submit:disabled{opacity:.5;cursor:not-allowed;}
+#signup-cancel{
+  width:100%;background:none;border:none;
+  color:rgba(167,139,250,.4);font-family:'Orbitron',sans-serif;
+  font-size:.55rem;letter-spacing:.1em;cursor:pointer;padding:.3rem;
+}
+#signup-cancel:hover{color:rgba(167,139,250,.7);}
+#signup-msg{
+  font-size:.6rem;letter-spacing:.08em;
+  text-align:center;margin-bottom:.6rem;min-height:1rem;
+}
+</style>
+</head>
+<body>
+
+<div id="warp"></div>
+
+<!-- 이메일 수집 모달 -->
+<div id="signup-modal">
+  <div id="signup-box">
+    <div id="signup-title">무료 체험 시작하기</div>
+    <div id="signup-sub">지금 등록하면 베타 초대장을 보내드립니다.<br>설치 없음 · 카드 없음 · 언제든 취소 가능</div>
+    <input class="sfield" id="signup-name"  type="text"  placeholder="이름 (선택)" autocomplete="name"/>
+    <input class="sfield" id="signup-email" type="email" placeholder="이메일 주소" autocomplete="email"/>
+    <div id="signup-msg"></div>
+    <button id="signup-submit" onclick="submitSignup()">베타 신청하기 →</button>
+    <button id="signup-cancel" onclick="closeSignup()">나중에 할게요</button>
+  </div>
+</div>
+
+<!-- AI 응답 패널 -->
+<div id="ai-panel">
+  <div id="ai-handle"></div>
+  <div id="ai-query-label">YOUR QUESTION</div>
+  <div id="ai-query-text"></div>
+  <div id="ai-response"></div>
+  <div id="ai-cta-row">
+    <button id="ai-cta-btn" onclick="openSignup()">무료 체험 시작하기 →</button>
+    <button id="ai-close-btn" onclick="closeAiPanel()">닫기</button>
+  </div>
+</div>
+
+<div id="ui">
+  <div id="title">NOVA UNIVERSE</div>
+  <div id="subtitle">AI CONTENT AUTOMATION</div>
+  <div id="search-wrap">
+    <input id="search-input" type="text" placeholder="무엇을 자동화하고 싶으신가요?" autocomplete="off"/>
+    <button id="enter-btn">ENTER</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// 행성 데이터
+// ══════════════════════════════════════
+const PLANETS = [
+  {name:'AUTOMATE', color:0xa78bfa, emissive:0x5b21b6, orbitA:12, orbitB:7,  speed:0.30, phase:0,   size:0.60},
+  {name:'PUBLISH',  color:0x60a5fa, emissive:0x1d4ed8, orbitA:16, orbitB:10, speed:0.20, phase:1.2, size:0.58},
+  {name:'ANALYZE',  color:0x34d399, emissive:0x065f46, orbitA:21, orbitB:13, speed:0.15, phase:2.5, size:0.68},
+  {name:'PRICING',  color:0xfbbf24, emissive:0x92400e, orbitA:17, orbitB:11, speed:0.25, phase:3.8, size:0.55},
+  {name:'START',    color:0xf472b6, emissive:0xbe185d, orbitA:19, orbitB:12, speed:0.18, phase:5.1, size:0.52},
+];
+
+// ══════════════════════════════════════
+// Three.js 초기화
+// ══════════════════════════════════════
+const W = window.innerWidth, H = window.innerHeight;
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(W,H);
+renderer.setClearColor(0x02000a,1);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000000, 0.008);
+
+const camera = new THREE.PerspectiveCamera(60, W/H, 0.1, 2000);
+camera.position.set(0, 10, 35);
+camera.lookAt(0,0,0);
+
+// 조명
+scene.add(new THREE.AmbientLight(0x110022, 2));
+const core_light = new THREE.PointLight(0x7c3aed, 3, 100);
+core_light.position.set(0,0,0);
+scene.add(core_light);
+
+// ══════════════════════════════════════
+// 1. 별 파티클 3000개
+// ══════════════════════════════════════
+const starGeo = new THREE.BufferGeometry();
+const starPos = new Float32Array(9000);
+const starCol = new Float32Array(9000);
+for(let i=0;i<9000;i+=3){
+  const r=100+Math.random()*900;
+  const theta=Math.random()*Math.PI*2;
+  const phi=Math.acos(2*Math.random()-1);
+  starPos[i]  =r*Math.sin(phi)*Math.cos(theta);
+  starPos[i+1]=r*Math.sin(phi)*Math.sin(theta);
+  starPos[i+2]=r*Math.cos(phi);
+  const h=Math.random();
+  const b=0.4+Math.random()*0.6;
+  if(h<0.65){starCol[i]=b;starCol[i+1]=b;starCol[i+2]=b;}
+  else if(h<0.82){starCol[i]=b*.6;starCol[i+1]=b*.7;starCol[i+2]=b;}
+  else{starCol[i]=b;starCol[i+1]=b*.7;starCol[i+2]=b*.9;}
+}
+starGeo.setAttribute('position',new THREE.BufferAttribute(starPos,3));
+starGeo.setAttribute('color',new THREE.BufferAttribute(starCol,3));
+const starMat = new THREE.PointsMaterial({size:1.2,vertexColors:true,transparent:true,opacity:0.9,sizeAttenuation:true});
+scene.add(new THREE.Points(starGeo,starMat));
+
+// ══════════════════════════════════════
+// 1. 블랙홀
+// ══════════════════════════════════════
+// 검정 구체
+const bhGeo = new THREE.SphereGeometry(1.5,32,32);
+const bhMat = new THREE.MeshBasicMaterial({color:0x000000});
+const blackhole = new THREE.Mesh(bhGeo,bhMat);
+scene.add(blackhole);
+
+// 블랙홀 글로우
+const bhGlow1 = new THREE.Mesh(
+  new THREE.SphereGeometry(2.2,32,32),
+  new THREE.MeshBasicMaterial({color:0x4f46e5,transparent:true,opacity:0.15,side:THREE.BackSide})
+);
+const bhGlow2 = new THREE.Mesh(
+  new THREE.SphereGeometry(3.2,32,32),
+  new THREE.MeshBasicMaterial({color:0x7c3aed,transparent:true,opacity:0.07,side:THREE.BackSide})
+);
+scene.add(bhGlow1);
+scene.add(bhGlow2);
+
+// 강착원반 토러스 1
+const disk1 = new THREE.Mesh(
+  new THREE.TorusGeometry(3.5,0.35,16,120),
+  new THREE.MeshBasicMaterial({color:0x7c3aed,transparent:true,opacity:0.5})
+);
+disk1.rotation.x = Math.PI/2.5;
+scene.add(disk1);
+
+// 강착원반 토러스 2
+const disk2 = new THREE.Mesh(
+  new THREE.TorusGeometry(4.8,0.18,12,120),
+  new THREE.MeshBasicMaterial({color:0x4f46e5,transparent:true,opacity:0.35})
+);
+disk2.rotation.x = Math.PI/2.2;
+disk2.rotation.z = 0.3;
+scene.add(disk2);
+
+// ══════════════════════════════════════
+// 1. 네불라 파티클
+// ══════════════════════════════════════
+const nebGeo = new THREE.BufferGeometry();
+const nebPos = new Float32Array(6000);
+const nebCol = new Float32Array(6000);
+const nebColors=[[0.35,0.1,0.65],[0.12,0.15,0.55],[0.25,0.05,0.45]];
+for(let i=0;i<6000;i+=3){
+  const r=35+Math.random()*70;
+  const a=Math.random()*Math.PI*2;
+  const b=(Math.random()-.5)*0.6;
+  nebPos[i]=r*Math.cos(a); nebPos[i+1]=r*b*10; nebPos[i+2]=r*Math.sin(a);
+  const c=nebColors[Math.floor(Math.random()*3)];
+  const br=0.15+Math.random()*0.35;
+  nebCol[i]=c[0]*br; nebCol[i+1]=c[1]*br; nebCol[i+2]=c[2]*br;
+}
+nebGeo.setAttribute('position',new THREE.BufferAttribute(nebPos,3));
+nebGeo.setAttribute('color',new THREE.BufferAttribute(nebCol,3));
+const nebMat = new THREE.PointsMaterial({size:1.0,vertexColors:true,transparent:true,opacity:0.4,sizeAttenuation:true});
+scene.add(new THREE.Points(nebGeo,nebMat));
+
+// ══════════════════════════════════════
+// 2. 행성 5개 (타원 궤도)
+// ══════════════════════════════════════
+const planetMeshes=[], planetAngles=[];
+
+PLANETS.forEach((p,i)=>{
+  // 궤도 시각화 (타원 커브)
+  const curve = new THREE.EllipseCurve(0,0,p.orbitA,p.orbitB,0,Math.PI*2,false,0);
+  const pts = curve.getPoints(120);
+  const orbitGeo = new THREE.BufferGeometry().setFromPoints(pts.map(pt=>new THREE.Vector3(pt.x,0,pt.y)));
+  const orbitMat = new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.05});
+  scene.add(new THREE.Line(orbitGeo,orbitMat));
+
+  // 행성
+  const geo = new THREE.SphereGeometry(p.size,32,32);
+  const mat = new THREE.MeshPhongMaterial({color:p.color,emissive:p.emissive,emissiveIntensity:0.5,shininess:80});
+  const mesh = new THREE.Mesh(geo,mat);
+  scene.add(mesh);
+
+  // 행성 글로우
+  const gMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(p.size*1.5,16,16),
+    new THREE.MeshBasicMaterial({color:p.color,transparent:true,opacity:0.1,side:THREE.BackSide})
+  );
+  scene.add(gMesh);
+  mesh.userData.glow = gMesh;
+  mesh.userData.planet = p;
+
+  planetMeshes.push(mesh);
+  planetAngles.push(p.phase);
+});
+
+// ══════════════════════════════════════
+// 검색 파티클 (500개, 블랙홀 빨려들기용)
+// ══════════════════════════════════════
+const SUCK_COUNT = 500;
+const suckGeo = new THREE.BufferGeometry();
+const suckPos = new Float32Array(SUCK_COUNT*3);
+const suckVel = new Float32Array(SUCK_COUNT*3);
+let suckActive = false;
+let suckProgress = 0;
+const suckOrigins = new Float32Array(SUCK_COUNT*3);
+
+function initSuckParticles(){
+  for(let i=0;i<SUCK_COUNT;i++){
+    const r=10+Math.random()*25;
+    const a=Math.random()*Math.PI*2;
+    const b=(Math.random()-.5)*2;
+    suckOrigins[i*3]  = r*Math.cos(a);
+    suckOrigins[i*3+1]= r*b*3;
+    suckOrigins[i*3+2]= r*Math.sin(a);
+    suckPos[i*3]  = suckOrigins[i*3];
+    suckPos[i*3+1]= suckOrigins[i*3+1];
+    suckPos[i*3+2]= suckOrigins[i*3+2];
+  }
+  suckGeo.setAttribute('position',new THREE.BufferAttribute(suckPos,3));
+}
+initSuckParticles();
+const suckMat = new THREE.PointsMaterial({size:0.3,color:0xa78bfa,transparent:true,opacity:0,sizeAttenuation:true});
+const suckPoints = new THREE.Points(suckGeo,suckMat);
+scene.add(suckPoints);
+
+// ══════════════════════════════════════
+// 라벨 DOM
+// ══════════════════════════════════════
+const labels = PLANETS.map((p,i)=>{
+  const div=document.createElement('div');
+  div.className='planet-label';
+  div.innerHTML=`<span class="name" style="color:#${p.color.toString(16).padStart(6,'0')}">${p.name}</span>`;
+  document.body.appendChild(div);
+  return div;
+});
+
+// ══════════════════════════════════════
+// 카메라 제어 (마우스 패럴랙스)
+// ══════════════════════════════════════
+let mouseX=0, mouseY=0;
+let camBaseX=0, camBaseY=10, camBaseZ=35;
+let camTargetX=0, camTargetY=10, camTargetZ=35;
+let warpActive=false;
+let warpZ=0;
+
+document.addEventListener('mousemove',e=>{
+  mouseX=(e.clientX/window.innerWidth-.5)*2;
+  mouseY=-(e.clientY/window.innerHeight-.5)*2;
+  camTargetX = mouseX*4;
+  camTargetY = 10 + mouseY*2;
+});
+
+// ══════════════════════════════════════
+// 검색창 인터랙션
+// ══════════════════════════════════════
+const warpEl = document.getElementById('warp');
+const searchInput = document.getElementById('search-input');
+const enterBtn = document.getElementById('enter-btn');
+
+function closeAiPanel(){
+  document.getElementById('ai-panel').classList.remove('open');
+}
+
+async function triggerSearch(){
+  if(warpActive) return;
+  const val = searchInput.value.trim();
+  if(!val) return;
+
+  // 파티클 빨려들기 효과
+  warpActive=true;
+  initSuckParticles();
+  suckMat.opacity=0.8;
+  suckProgress=0;
+
+  // 응답 패널 로딩 상태로 열기
+  const panel=document.getElementById('ai-panel');
+  const responseEl=document.getElementById('ai-response');
+  const queryTextEl=document.getElementById('ai-query-text');
+  queryTextEl.textContent='"'+val+'"';
+  responseEl.textContent='';
+  responseEl.classList.add('loading');
+  panel.classList.add('open');
+
+  // 파티클 효과 마무리
+  setTimeout(()=>{ warpZ=-30; },200);
+  setTimeout(()=>{ warpZ=0; suckMat.opacity=0; warpActive=false; initSuckParticles(); },700);
+
+  try {
+    const res = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ query: val })
+    });
+    const data = await res.json();
+    responseEl.classList.remove('loading');
+    if(data.result){
+      // 타이핑 효과
+      let i=0;
+      const text=data.result;
+      responseEl.textContent='';
+      const iv=setInterval(()=>{
+        responseEl.textContent=text.slice(0,++i);
+        if(i>=text.length) clearInterval(iv);
+      },18);
+    } else {
+      responseEl.textContent = data.error || '응답을 받지 못했습니다.';
+    }
+  } catch(e) {
+    responseEl.classList.remove('loading');
+    responseEl.textContent = '연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+  }
+
+  searchInput.value='';
+}
+
+enterBtn.addEventListener('click',triggerSearch);
+searchInput.addEventListener('keydown',e=>{ if(e.key==='Enter') triggerSearch(); });
+
+// ══════════════════════════════════════
+// 라벨 업데이트
+// ══════════════════════════════════════
+function updateLabels(){
+  planetMeshes.forEach((mesh,i)=>{
+    const wp=new THREE.Vector3();
+    mesh.getWorldPosition(wp);
+    wp.project(camera);
+    if(wp.z>1){labels[i].style.display='none';return;}
+    labels[i].style.display='block';
+    labels[i].style.left=((wp.x+1)/2*window.innerWidth)+'px';
+    labels[i].style.top=((-wp.y+1)/2*window.innerHeight + PLANETS[i].size*28 + 14)+'px';
+  });
+}
+
+// ══════════════════════════════════════
+// 리사이즈
+// ══════════════════════════════════════
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ══════════════════════════════════════
+// 애니메이션 루프
+// ══════════════════════════════════════
+const clock = new THREE.Clock();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // 행성 타원 궤도 공전
+  PLANETS.forEach((p,i)=>{
+    planetAngles[i] += p.speed * 0.01;
+    const angle = planetAngles[i];
+    const x = p.orbitA * Math.cos(angle);
+    const z = p.orbitB * Math.sin(angle);
+    planetMeshes[i].position.set(x, 0, z);
+    planetMeshes[i].userData.glow.position.set(x, 0, z);
+    planetMeshes[i].rotation.y = t*0.4;
+  });
+
+  // 블랙홀 강착원반 회전
+  disk1.rotation.z = t*0.6;
+  disk2.rotation.z = -t*0.4;
+
+  // 블랙홀 글로우 펄스
+  const pulse = 1+Math.sin(t*1.5)*0.05;
+  bhGlow1.scale.set(pulse,pulse,pulse);
+  core_light.intensity = 2.5+Math.sin(t*2)*0.5;
+
+  // 별 반짝임
+  starMat.opacity = 0.85+Math.sin(t*0.4)*0.08;
+
+  // 검색 파티클 빨려들기
+  if(warpActive && suckMat.opacity>0){
+    suckProgress = Math.min(suckProgress+0.025, 1);
+    const pos = suckGeo.attributes.position.array;
+    for(let i=0;i<SUCK_COUNT;i++){
+      const ease = suckProgress*(2-suckProgress); // ease-in
+      pos[i*3]   = suckOrigins[i*3]   * (1-ease);
+      pos[i*3+1] = suckOrigins[i*3+1] * (1-ease);
+      pos[i*3+2] = suckOrigins[i*3+2] * (1-ease);
+    }
+    suckGeo.attributes.position.needsUpdate=true;
+  }
+
+  // 카메라 패럴랙스 + 워프
+  camBaseX += (camTargetX - camBaseX)*0.04;
+  camBaseY += (camTargetY - camBaseY)*0.04;
+  const warpZTarget = warpZ;
+  camera.position.x = camBaseX;
+  camera.position.y = camBaseY;
+  camera.position.z += (camBaseZ + warpZTarget - camera.position.z)*0.12;
+  camera.lookAt(0,0,0);
+
+  updateLabels();
+  renderer.render(scene,camera);
+}
+animate();
+
+// ══════════════════════════════════════
+// 이메일 수집 모달
+// ══════════════════════════════════════
+function openSignup(){
+  document.getElementById('signup-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('signup-email').focus(), 350);
+}
+function closeSignup(){
+  document.getElementById('signup-modal').classList.remove('open');
+  document.getElementById('signup-msg').textContent='';
+  document.getElementById('signup-msg').style.color='';
+}
+document.getElementById('signup-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('signup-modal')) closeSignup();
+});
+
+async function submitSignup(){
+  const email = document.getElementById('signup-email').value.trim();
+  const name  = document.getElementById('signup-name').value.trim();
+  const msgEl = document.getElementById('signup-msg');
+  const btn   = document.getElementById('signup-submit');
+
+  if(!email){ msgEl.style.color='#f87171'; msgEl.textContent='이메일을 입력해주세요.'; return; }
+
+  btn.disabled=true;
+  btn.textContent='처리 중...';
+  msgEl.textContent='';
+
+  try {
+    const res = await fetch('/api/subscribe',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, name})
+    });
+    const data = await res.json();
+    if(data.ok){
+      msgEl.style.color='#34d399';
+      msgEl.textContent='✓ 등록 완료! 베타 초대장을 보내드릴게요.';
+      btn.textContent='등록 완료 ✓';
+      document.getElementById('signup-email').value='';
+      document.getElementById('signup-name').value='';
+      setTimeout(closeSignup, 2200);
+    } else {
+      msgEl.style.color='#f87171';
+      msgEl.textContent=data.error||'오류가 발생했습니다.';
+      btn.disabled=false; btn.textContent='베타 신청하기 →';
+    }
+  } catch {
+    msgEl.style.color='#f87171';
+    msgEl.textContent='연결 오류. 잠시 후 다시 시도해주세요.';
+    btn.disabled=false; btn.textContent='베타 신청하기 →';
+  }
+}
+document.getElementById('signup-email').addEventListener('keydown',e=>{
+  if(e.key==='Enter') submitSignup();
+});
+</script>
+<!-- PANEL -->
+<div id="panel" style="display:none;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(480px,90vw);background:rgba(10,5,30,0.95);border:1px solid rgba(167,139,250,0.3);border-bottom:none;border-radius:20px 20px 0 0;padding:2rem;backdrop-filter:blur(30px);z-index:100;font-family:'Orbitron',monospace">
+<div style="width:40px;height:3px;background:rgba(167,139,250,0.4);border-radius:2px;margin:0 auto 1.5rem"></div>
+<div id="pname" style="font-size:1.1rem;font-weight:700;letter-spacing:0.2em;color:#fff;margin-bottom:0.5rem"></div>
+<div id="pdesc" style="font-size:0.75rem;color:#a78bfa;letter-spacing:0.1em;line-height:1.8;margin-bottom:1.5rem;white-space:pre-line"></div>
+<button onclick="closePanel()" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:50px;padding:0.6rem 1.5rem;color:#fff;font-family:'Orbitron',monospace;font-size:0.75rem;cursor:pointer">시작하기 →</button>
+</div>
+<script>
+const PD={
+  AUTOMATE:"하루 3시간 콘텐츠 작업, 이제 15분으로 줄어듭니다.\n주제만 던지면 AI가 기획부터 초안까지 완성.",
+  PUBLISH:"Threads, Instagram, YouTube 동시 발행.\n한 번 만들어서 세 곳에 올리세요.",
+  ANALYZE:"어떤 콘텐츠가 반응 좋았는지 AI가 분석하고\n다음 주제를 추천합니다.",
+  PRICING:"Free로 시작해서 수익이 생기면 업그레이드하세요.\n구독 언제든 취소 가능.",
+  START:"이메일 하나로 시작합니다.\n설치 없음. 코딩 없음. 지금 바로 무료로."
+};
+function closePanel(){document.getElementById('panel').style.display='none';}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('.planet-label');
+  if(!el)return;
+  e.stopPropagation();
+  const name=el.textContent.trim();
+  if(name==='PRICING'){
+    document.getElementById('pricing').style.display='block';
+    return;
+  }
+  const d=PD[name];
+  if(!d)return;
+  document.getElementById('pname').textContent=name;
+  document.getElementById('pdesc').textContent=d;
+  document.getElementById('panel').style.display='block';
+});
+</script>
+<div id="pricing" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(600px,90vw);background:rgba(10,5,30,0.97);border:1px solid rgba(167,139,250,0.3);border-radius:20px;padding:2rem;backdrop-filter:blur(30px);z-index:200;font-family:'Orbitron',monospace">
+<div style="text-align:right"><button onclick="document.getElementById('pricing').style.display='none'" style="background:none;border:none;color:#a78bfa;cursor:pointer;font-size:1.2rem">✕</button></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:0.5rem">
+<div style="border:1px solid rgba(167,139,250,0.2);border-radius:12px;padding:1.2rem;text-align:center">
+<div style="font-size:0.7rem;letter-spacing:0.2em;color:#a78bfa;margin-bottom:0.5rem">FREE</div>
+<div style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.8rem">₩0</div>
+<div style="font-size:0.6rem;color:#7c6fa0;line-height:2">콘텐츠 3개/일<br>1개 플랫폼<br>기본 템플릿</div>
+</div>
+<div style="border:2px solid #7c3aed;border-radius:12px;padding:1.2rem;text-align:center;position:relative">
+<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#7c3aed;font-size:0.5rem;padding:2px 10px;border-radius:10px;color:#fff;letter-spacing:0.1em">POPULAR</div>
+<div style="font-size:0.7rem;letter-spacing:0.2em;color:#a78bfa;margin-bottom:0.5rem">PRO</div>
+<div style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.8rem">₩29,000</div>
+<div style="font-size:0.6rem;color:#7c6fa0;line-height:2">무제한 콘텐츠<br>3개 플랫폼<br>AI 트렌드 수집</div>
+</div>
+<div style="border:1px solid rgba(167,139,250,0.2);border-radius:12px;padding:1.2rem;text-align:center">
+<div style="font-size:0.7rem;letter-spacing:0.2em;color:#a78bfa;margin-bottom:0.5rem">BUSINESS</div>
+<div style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.8rem">₩79,000</div>
+<div style="font-size:0.6rem;color:#7c6fa0;line-height:2">팀 계정 5명<br>전체 플랫폼<br>성과 분석 리포트</div>
+</div>
+</div>
+</div>
+<!-- FLOATING CARDS -->
+<style>
+.fcard{
+  position:fixed;width:clamp(160px,18vw,220px);
+  background:rgba(10,5,30,0.85);
+  border-radius:12px;
+  padding:clamp(12px,1.5vw,16px);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  cursor:pointer;z-index:10;
+  transition:transform .25s,box-shadow .25s;
+  font-family:'Orbitron',sans-serif;
+}
+.fcard:hover{transform:scale(1.07) translateY(var(--fy,0px))!important;box-shadow:0 0 30px rgba(167,139,250,0.4);}
+.fcard-platform{font-size:clamp(.42rem,.55vw,.58rem);font-weight:700;letter-spacing:.2em;margin-bottom:.4rem;}
+.fcard-date{font-size:clamp(.38rem,.48vw,.5rem);color:rgba(167,139,250,.4);letter-spacing:.08em;margin-bottom:.5rem;}
+.fcard-title{font-size:clamp(.55rem,.7vw,.7rem);font-weight:700;color:#fff;line-height:1.5;letter-spacing:.05em;}
+@keyframes fc0{0%{transform:translateY(0)}100%{transform:translateY(-14px)}}
+@keyframes fc1{0%{transform:translateY(-6px)}100%{transform:translateY(-20px)}}
+@keyframes fc2{0%{transform:translateY(-3px)}100%{transform:translateY(-17px)}}
+
+/* ─── 바텀 네비 ──────────────────────────────────────── */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  display:flex;height:60px;
+  background:rgba(0,0,10,.96);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(139,92,246,.3);
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;text-decoration:none;color:rgba(139,92,246,.55);
+  font-family:'Orbitron',sans-serif;transition:color .2s;position:relative;
+}
+.bnav-item:hover{color:rgba(196,181,253,.9);}
+.bnav-item.active{color:#fff;}
+.bnav-item.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:32px;height:2px;background:#8b5cf6;border-radius:0 0 4px 4px;
+  box-shadow:0 0 10px #8b5cf6;
+}
+.bnav-icon{font-size:1.2rem;line-height:1;}
+.bnav-text{font-size:.62rem;letter-spacing:.1em;font-weight:700;}
+</style>
+
+<!-- 카드 위 -->
+<div class="fcard" id="fc0" style="top:12%;left:50%;transform:translateX(-50%);border:1px solid #a78bfa;animation:fc0 4s ease-in-out infinite alternate">
+  <div class="fcard-platform" style="color:#a78bfa">AUTOMATE</div>
+  <div class="fcard-date">AI 생성 샘플</div>
+  <div class="fcard-title">주제 입력 → 3초 만에 완성된 콘텐츠 초안</div>
+</div>
+<!-- 카드 왼쪽 아래 -->
+<div class="fcard" id="fc1" style="bottom:14%;left:18%;border:1px solid #34d399;animation:fc1 4.5s ease-in-out infinite alternate">
+  <div class="fcard-platform" style="color:#34d399">ANALYZE</div>
+  <div class="fcard-date">성과 리포트</div>
+  <div class="fcard-title">이번 주 최고 반응 콘텐츠 · 다음 주제 3개 추천</div>
+</div>
+<!-- 카드 오른쪽 아래 -->
+<div class="fcard" id="fc2" style="bottom:14%;right:18%;border:1px solid #60a5fa;animation:fc2 3.8s ease-in-out infinite alternate">
+  <div class="fcard-platform" style="color:#60a5fa">PUBLISH</div>
+  <div class="fcard-date">발행 완료</div>
+  <div class="fcard-title">3개 플랫폼 동시 발행 · 예약 설정 완료</div>
+</div>
+
+<script>
+document.querySelectorAll('.fcard').forEach(card=>{
+  card.addEventListener('click',e=>{
+    e.stopPropagation();
+    const t=planetMeshes[0].position;
+    let f=0;
+    const sx=camera.position.x,sy=camera.position.y,sz=camera.position.z;
+    const iv=setInterval(()=>{
+      f++;const r=f/60;
+      camera.position.set(sx+(t.x*.5-sx)*r,sy+(t.y*.5-sy)*r,sz+(t.z+30-sz)*r);
+      if(f>=60)clearInterval(iv);
+    },16);
+  });
+});
+</script>
+
+<script>
+const CDATA=[
+  {platform:'THREADS',color:'#a78bfa',date:'2026-03-29',title:'AI 자동 판단',
+   body:`🧵 하루 50개 결정을 AI가 대신하면 생기는 일\n\n1/ 저는 매일 이런 결정을 AI한테 넘겼어요.\n"오늘 뭐 올릴까?"\n"이 훅이 맞나?"\n"지금 올리는 게 맞나?"\n\n처음엔 불안했어요.\n\n2/ 근데 2주 후에 뭔가 달라졌습니다.\n결정 피로가 사라졌어요.\nAI가 데이터 보고 판단하니까\n저는 실행만 하면 됐거든요.\n\n3/ Gartner 자료에 따르면\n2028년까지 정부의 80%가\nAI 자동 판단 시스템 도입 예정입니다.\n정부도 하는 걸 크리에이터가 못 할 이유 없잖아요.`},
+  {platform:'INSTAGRAM',color:'#f472b6',date:'2026-03-28',title:'AI 콘텐츠 자동화하는 법',
+   body:`콘텐츠 1개에 2시간 쓰던 사람이 지금은 15분이면 끝낸다.\nAI 자동화 구조 하나 생겼을 뿐인데.`},
+  {platform:'YOUTUBE',color:'#f87171',date:'2026-03-28',title:'AI로 콘텐츠 자동화하는 법',
+   body:`제목 후보:\n1. "AI로 콘텐츠 만드는 데 15분 걸린다"\n2. "크리에이터들이 안 알려주는 AI 자동화 구조"\n3. "혼자 주 5개 올리는 사람의 비밀"`},
+];
+
+// 카드 클릭 → 모달
+document.querySelectorAll('.fcard').forEach(card=>{
+  card.addEventListener('click',e=>{
+    e.stopPropagation();
+    const d=CDATA[+card.dataset.idx];
+    document.getElementById('cmodal-platform').textContent=d.platform;
+    document.getElementById('cmodal-platform').style.color=d.color;
+    document.getElementById('cmodal-title').textContent=d.title;
+    document.getElementById('cmodal-date').textContent=d.date;
+    document.getElementById('cmodal-body').textContent=d.body;
+    document.getElementById('cmodal').classList.add('on');
+  });
+});
+
+// 모달 배경 클릭 닫기
+document.getElementById('cmodal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('cmodal'))
+    document.getElementById('cmodal').classList.remove('on');
+});
+
+// 마우스 tilt 효과
+document.querySelectorAll('.fcard').forEach(card=>{
+  card.addEventListener('mousemove',e=>{
+    const r=card.getBoundingClientRect();
+    const x=((e.clientX-r.left)/r.width-.5)*22;
+    const y=-((e.clientY-r.top)/r.height-.5)*22;
+    card.style.transform=`perspective(600px) rotateY(${x}deg) rotateX(${y}deg) translateY(var(--fy,0px))`;
+  });
+  card.addEventListener('mouseleave',()=>{
+    card.style.transform='';
+  });
+});
+</script>
+
+<nav id="bottom-nav">
+  <a href="/" class="bnav-item active"><span class="bnav-icon">✦</span><span class="bnav-text">UNIVERSE</span></a>
+  <a href="/chat" class="bnav-item"><span class="bnav-icon">◎</span><span class="bnav-text">CHAT</span></a>
+  <a href="/project" class="bnav-item"><span class="bnav-icon">⬡</span><span class="bnav-text">PROJECT</span></a>
+  <a href="/budget" class="bnav-item"><span class="bnav-icon">◈</span><span class="bnav-text">BUDGET</span></a>
+  <a href="/upgrade" class="bnav-item"><span class="bnav-icon">⬆</span><span class="bnav-text">UPGRADE</span></a>
+</nav>
+</body>
+</html>

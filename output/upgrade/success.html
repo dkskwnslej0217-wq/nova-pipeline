@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVA — 결제 완료</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000005;color:#e2e8f0;font-family:'Orbitron',sans-serif;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;}
+.icon{font-size:3rem;margin-bottom:16px;}
+h1{font-size:clamp(1rem,2.5vw,1.4rem);font-weight:900;letter-spacing:.3em;
+  color:#fff;text-shadow:0 0 30px #8b5cf6;margin-bottom:8px;text-align:center;}
+.sub{font-size:.78rem;letter-spacing:.15em;color:rgba(167,139,250,.7);margin-bottom:32px;text-align:center;}
+.status{font-size:.75rem;letter-spacing:.1em;color:rgba(255,255,255,.6);text-align:center;min-height:24px;}
+.status.ok{color:#34d399;}
+.status.err{color:#f87171;}
+.btn{margin-top:28px;padding:12px 28px;border:1px solid rgba(139,92,246,.5);
+  background:rgba(139,92,246,.12);color:#c4b5fd;font-family:'Orbitron',sans-serif;
+  font-size:.72rem;letter-spacing:.2em;border-radius:8px;cursor:pointer;text-decoration:none;
+  transition:background .2s;}
+.btn:hover{background:rgba(139,92,246,.25);}
+</style>
+</head>
+<body>
+<div class="icon">✦</div>
+<h1>결제 처리 중...</h1>
+<p class="sub">잠시만 기다려주세요</p>
+<p id="status" class="status"></p>
+<a id="home-btn" href="/" class="btn" style="display:none">UNIVERSE로 돌아가기</a>
+
+<script>
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const paymentKey = params.get('paymentKey');
+  const orderId    = params.get('orderId');
+  const amount     = params.get('amount');
+  const plan       = params.get('plan');
+  const user_id    = params.get('user_id');
+
+  const statusEl = document.getElementById('status');
+  const h1 = document.querySelector('h1');
+  const sub = document.querySelector('.sub');
+  const btn = document.getElementById('home-btn');
+
+  if (!paymentKey || !orderId || !amount || !plan || !user_id) {
+    statusEl.textContent = '잘못된 접근입니다.';
+    statusEl.className = 'status err';
+    btn.style.display = 'inline-block';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-session-token': localStorage.getItem('nova_token') || '' },
+      body: JSON.stringify({ paymentKey, orderId, amount: Number(amount), plan, user_id }),
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('nova_user');
+      localStorage.removeItem('nova_token');
+      location.href = '/login.html';
+      return;
+    }
+    const data = await res.json();
+
+    if (data.ok) {
+      // localStorage 업데이트
+      const me = JSON.parse(localStorage.getItem('nova_user') || '{}');
+      me.plan_type = plan;
+      me.plan = plan;
+      localStorage.setItem('nova_user', JSON.stringify(me));
+
+      h1.textContent = '결제 완료!';
+      sub.textContent = plan === 'pro' ? '💜 Pro 플랜이 활성화됐습니다' : '💙 Starter 플랜이 활성화됐습니다';
+      statusEl.textContent = `구독 기간: 오늘부터 30일`;
+      statusEl.className = 'status ok';
+    } else {
+      h1.textContent = '결제 실패';
+      statusEl.textContent = data.error || '오류가 발생했습니다.';
+      statusEl.className = 'status err';
+    }
+  } catch (e) {
+    h1.textContent = '네트워크 오류';
+    statusEl.textContent = '결제 확인 중 오류가 발생했습니다. 고객센터에 문의해주세요.';
+    statusEl.className = 'status err';
+  }
+
+  btn.style.display = 'inline-block';
+})();
+</script>
+</body>
+</html>

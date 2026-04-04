@@ -1,0 +1,9 @@
+{
+  "type": "module",
+  "dependencies": {
+    "googleapis": "^171.4.0"
+  },
+  "scripts": {
+    "test": "node test_pipeline.js"
+  }
+}
