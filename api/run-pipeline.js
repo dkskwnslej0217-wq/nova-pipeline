@@ -13,7 +13,7 @@ const TG_TOKEN      = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOK
 const TG_CHAT       = process.env.TELEGRAM_CHAT_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
-const GITHUB_REPO     = 'dkskwnslej0217-wq/my-project';
+const GITHUB_REPO     = 'dkskwnslej0217-wq/nova-pipeline';
 
 // ─── Telegram 알림 ────────────────────────────────────────
 async function tg(msg) {
@@ -114,7 +114,7 @@ async function finalizeContent(keywords, hooks) {
 // ─── Supabase 저장 ────────────────────────────────────────
 async function saveToSupabase(topic, content) {
   try {
-    await fetch(`${SUPA_URL}/rest/v1/memory`, {
+    await fetch(`${SUPA_URL}/rest/v1/cache`, {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
@@ -122,10 +122,10 @@ async function saveToSupabase(topic, content) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        date: new Date().toISOString().slice(0, 10),
+        hash: btoa(topic).slice(0, 32),
         topic,
-        summary: content.slice(0, 200),
-        result: content,
+        content: content.slice(0, 1000),
+        score: 1,
       }),
     });
   } catch { /* 저장 실패는 파이프라인 중단하지 않음 */ }
