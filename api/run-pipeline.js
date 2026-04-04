@@ -60,8 +60,8 @@ async function generateHooks(keywords) {
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages: [
-        { role: 'system', content: '당신은 한국어 SNS 콘텐츠 작성 전문가입니다. 반드시 한국어로만 답변하세요.' },
-        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개. 각 40자 이내. 번호 붙여서. 강렬하게.` }
+        { role: 'system', content: '당신은 한국어 SNS 콘텐츠 작성 전문가입니다. 오직 한국어만 사용하세요. 중국어, 영어, 일본어 절대 사용 금지. 한국어만.' },
+        { role: 'user', content: `키워드: ${keywords}\n\n[한국어만 사용할 것]\n스레드 첫 줄 훅 3개. 각 40자 이내. 번호 붙여서. 강렬하게.` }
       ],
       max_tokens: 400,
     }),
@@ -73,7 +73,7 @@ async function generateHooks(keywords) {
 
 // ─── 14d: 최종 완성 (Groq 우선 → 실패 시 Claude 폴백) ──────
 async function finalizeContent(keywords, hooks) {
-  const prompt = `[IMPORTANT: 반드시 한국어로만 작성하세요. 절대 중국어/영어 사용 금지]\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n가장 강한 훅 1개 골라서 스레드 콘텐츠 완성:\n[훅 - 1줄]\n[본문 - 3~5줄, 짧고 강하게]\n[마무리 - 행동 유도 1줄]\n\n한국어만 사용, 소상공인/1인 창업자 타겟, 실용적이고 친근한 톤.`;
+  const prompt = `[CRITICAL: 한국어만 사용. 중국어·영어·일본어 한 글자도 금지. 위반 시 완전 실패.]\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n가장 강한 훅 1개 골라서 스레드 콘텐츠 완성:\n[훅 - 1줄]\n[본문 - 3~5줄, 짧고 강하게]\n[마무리 - 행동 유도 1줄]\n\n한국어만 사용, 소상공인/1인 창업자 타겟, 실용적이고 친근한 톤.`;
 
   // 1차: Groq (무료)
   try {
