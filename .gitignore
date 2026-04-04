@@ -1,0 +1,11 @@
+.env
+.env.local
+.env.*.local
+node_modules/
+output/video/*.mp4
+output/video/*.mp3
+output/video/*.wav
+*.mp4
+*.mp3
+*.wav
+.vercel
