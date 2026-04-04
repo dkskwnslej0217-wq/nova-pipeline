@@ -133,9 +133,11 @@ async function saveToSupabase(topic, content) {
 
 // ─── 메인 핸들러 ──────────────────────────────────────────
 export default async function handler(req) {
-  // 보안: Vercel cron 또는 시크릿 토큰 검증
+  // 보안: Vercel cron(CRON_SECRET) 또는 수동 호출(PIPELINE_SECRET) 검증
+  const CRON_SECRET = process.env.CRON_SECRET;
+  const authHeader = req.headers.get('authorization');
   const secret = req.headers.get('x-pipeline-secret');
-  const isCron = req.headers.get('x-vercel-cron') === '1';
+  const isCron = CRON_SECRET && authHeader === `Bearer ${CRON_SECRET}`;
   if (!isCron && secret !== PIPELINE_SECRET) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
