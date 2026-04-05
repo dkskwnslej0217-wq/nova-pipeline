@@ -11,7 +11,7 @@ function buildImageUrl(text) {
   return `https://image.pollinations.ai/prompt/${prompt}?width=1080&height=1080&nologo=true`;
 }
 
-async function postToInstagram(text) {
+async function postToInstagram(text, retry = 0) {
   const imageUrl = buildImageUrl(text);
   const caption = text.slice(0, 2200);
 
@@ -29,8 +29,13 @@ async function postToInstagram(text) {
     }
   );
   if (!createRes.ok) {
-    const err = await createRes.text();
-    throw new Error(`Instagram 컨테이너 생성 실패: ${createRes.status} ${err}`);
+    const errText = await createRes.text();
+    // 일시적 오류면 1회 재시도
+    if (retry === 0 && errText.includes('"is_transient":true')) {
+      await new Promise(r => setTimeout(r, 5000));
+      return postToInstagram(text, 1);
+    }
+    throw new Error(`Instagram 컨테이너 생성 실패: ${createRes.status} ${errText}`);
   }
   const { id: creation_id } = await createRes.json();
 
