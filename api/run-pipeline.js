@@ -73,8 +73,8 @@ async function generateHooks(keywords) {
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages: [
-        { role: 'system', content: '너는 30대 한국 1인 창업자야. 친구한테 카톡 보내듯이 써. 격식 없이, 짧게, 진짜 사람이 쓴 것처럼. 한국어만. 중국어/영어/아랍어 절대 금지.' },
-        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개. 40자 이내. 번호 붙여서. 친구한테 말하듯 자연스럽게.` }
+        { role: 'system', content: '너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽하게 지켜. 카톡 말투로 짧게 써. AI 티 나면 안 됨. "~요" "~습니다" 금지. "ㅋㅋ" "ㄹㅇ" "진짜" "솔직히" 같은 자연스러운 표현 써. 한국어만.' },
+        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개만. 각 40자 이내. 번호 없이. 읽자마자 공감되는 문장으로.` }
       ],
       max_tokens: 400,
     }),
@@ -86,7 +86,7 @@ async function generateHooks(keywords) {
 
 // ─── 14d: 최종 완성 (Groq 우선 → 실패 시 Claude 폴백) ──────
 async function finalizeContent(keywords, hooks) {
-  const prompt = `너는 30대 한국 1인 창업자야. 한국어만 써. 중국어/영어/아랍어 절대 금지.\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n제일 자연스러운 훅 1개 골라서 스레드 글 완성해줘:\n첫줄: 훅 (친구한테 말하듯)\n본문: 3~4줄, 짧고 진짜 경험담처럼\n마지막: 공감 유도 or 질문 1줄\n\n절대 AI 같은 말투 금지. 진짜 사람이 쓴 것처럼.`;
+  const prompt = `너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽히 지켜. 한국어만 써.\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n위 훅 중 1개 골라서 스레드 글 완성해:\n- 첫줄: 훅 문장 (짧고 임팩트 있게)\n- 본문: 2~3줄, 실제 경험담처럼 구체적으로\n- 마지막: 질문 or 공감 유도 1줄\n\n규칙:\n- "~요" "~습니다" "안녕하세요" 절대 금지\n- AI 느낌 나는 표현 금지 (예: "오늘은~", "여러분~", "함께~")\n- 진짜 사람이 쓴 것처럼\n- 총 150자 이내\n- 이모지 1~2개만`;
 
   // 1차: Groq (무료)
   try {
