@@ -1,20 +1,29 @@
-// api/post-instagram.js — Instagram 자동 발행
+// api/post-instagram.js — Instagram 자동 발행 (Pollinations.ai 이미지 포함)
 export const config = { runtime: 'edge' };
 
 const IG_TOKEN      = process.env.INSTAGRAM_ACCESS_TOKEN;
 const IG_ACCOUNT_ID = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 
+function buildImageUrl(text) {
+  // 첫 30자로 프롬프트 생성 (영어로 변환 안 해도 Pollinations가 처리)
+  const prompt = encodeURIComponent(text.slice(0, 60) + ', Korean SNS style, vibrant, minimal');
+  return `https://image.pollinations.ai/prompt/${prompt}?width=1080&height=1080&nologo=true`;
+}
+
 async function postToInstagram(text) {
-  // 1단계: 미디어 컨테이너 생성 (텍스트 전용)
+  const imageUrl = buildImageUrl(text);
+  const caption = text.slice(0, 2200);
+
+  // 1단계: 미디어 컨테이너 생성 (이미지 필수)
   const createRes = await fetch(
     `https://graph.instagram.com/v21.0/${IG_ACCOUNT_ID}/media`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        media_type: 'TEXT',
-        text: text.slice(0, 2200),
+        image_url: imageUrl,
+        caption,
         access_token: IG_TOKEN,
       }),
     }
