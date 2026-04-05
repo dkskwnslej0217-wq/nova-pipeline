@@ -1,15 +1,17 @@
 // pipeline.js — 멀티모델 파이프라인
 // 14a YouTube TOP10 → 14b Gemini 키워드 → 14c Groq 훅 → 14d Claude 최종완성
 
-const https = require('https');
-const fs = require('fs');
+import https from 'https';
+import fs from 'fs';
 
 // .env 로드
-const env = fs.readFileSync('.env', 'utf8');
-env.split('\n').forEach(line => {
-  const [k, ...v] = line.split('=');
-  if (k && v.length) process.env[k.trim()] = v.join('=').trim();
-});
+try {
+  const env = fs.readFileSync('.env', 'utf8');
+  env.split('\n').forEach(line => {
+    const [k, ...v] = line.split('=');
+    if (k && v.length) process.env[k.trim()] = v.join('=').trim();
+  });
+} catch { /* .env 없으면 환경변수 그대로 사용 */ }
 
 const YOUTUBE_KEY   = process.env.YOUTUBE_API_KEY;
 const GEMINI_KEY    = process.env.GEMINI_API_KEY;
@@ -47,7 +49,7 @@ async function extractKeywords(titles) {
   const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
   const res = await httpRequest({
     hostname: 'generativelanguage.googleapis.com',
-    path: `/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_KEY}`,
+    path: `/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
   }, body);

@@ -1,7 +1,7 @@
 // api/run-pipeline.js — Make.com 스케줄 트리거 엔드포인트
 // Make.com → 매일 오전 8시 → 이 엔드포인트 호출 → 파이프라인 실행 → Telegram 결과 알림
 
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 const YOUTUBE_KEY   = process.env.YOUTUBE_API_KEY;
 const GEMINI_KEY    = process.env.GEMINI_API_KEY;
@@ -13,7 +13,7 @@ const TG_TOKEN      = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOK
 const TG_CHAT       = process.env.TELEGRAM_CHAT_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
-const GITHUB_REPO     = 'dkskwnslej0217-wq/nova-pipeline';
+const GITHUB_REPO     = process.env.GITHUB_REPO || 'dkskwnslej0217-wq/nova-pipeline';
 
 // ─── 중국어/외계어 제거 필터 ──────────────────────────────
 function filterKoreanOnly(text) {
@@ -164,8 +164,8 @@ export default async function handler(req) {
       });
       await tg(`✅ 일/월 사용량 초기화 완료 (${today.toISOString().slice(0, 7)})`);
     } else {
-      // 매일: daily_count만 리셋
-      await fetch(`${SUPA_URL}/rest/v1/users`, {
+      // 매일: daily_count가 0보다 큰 유저만 리셋 (전체 업데이트 방지)
+      await fetch(`${SUPA_URL}/rest/v1/users?daily_count=gt.0`, {
         method: 'PATCH',
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ daily_count: 0 }),
