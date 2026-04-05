@@ -294,6 +294,23 @@ export default async function handler(req, res) {
       await tg(`⚠️ Instagram 발행 오류: ${e.message}`);
     }
 
+    // Facebook 발행
+    try {
+      const fbRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-facebook', {
+        method: 'POST',
+        headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: final }),
+      });
+      const fbData = await fbRes.json();
+      if (fbData.ok) {
+        await tg(`📘 Facebook 발행 완료 (post_id: ${fbData.post_id})`);
+      } else {
+        await tg(`⚠️ Facebook 발행 실패: ${fbData.error}`);
+      }
+    } catch(e) {
+      await tg(`⚠️ Facebook 발행 오류: ${e.message}`);
+    }
+
     // 성공 알림
     await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${final.slice(0, 300)}...`);
 
