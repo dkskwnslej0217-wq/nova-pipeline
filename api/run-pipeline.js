@@ -145,11 +145,11 @@ async function saveToSupabase(topic, content) {
 }
 
 // ─── 메인 핸들러 ──────────────────────────────────────────
-export default async function handler(req) {
+export default async function handler(req, res) {
   // 보안: 시크릿 토큰 검증 (Make.com 웹훅에서 헤더로 전달)
-  const secret = req.headers.get('x-pipeline-secret');
+  const secret = req.headers['x-pipeline-secret'];
   if (secret !== PIPELINE_SECRET) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   // 매일 → daily_count 리셋 / 매월 1일 → monthly_count 추가 리셋
@@ -297,16 +297,10 @@ export default async function handler(req) {
     // 성공 알림
     await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${final.slice(0, 300)}...`);
 
-    return new Response(JSON.stringify({ ok: true, topic, keywords }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(200).json({ ok: true, topic, keywords });
 
   } catch(e) {
     await tg(`❌ NOVA 파이프라인 실패\n${e.message}`);
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(500).json({ ok: false, error: e.message });
   }
 }
