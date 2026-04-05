@@ -34,6 +34,9 @@ async function postToInstagram(text) {
   }
   const { id: creation_id } = await createRes.json();
 
+  // 이미지 처리 대기 (5초)
+  await new Promise(r => setTimeout(r, 5000));
+
   // 2단계: 게시
   const publishRes = await fetch(
     `https://graph.instagram.com/v21.0/${IG_ACCOUNT_ID}/media_publish`,
