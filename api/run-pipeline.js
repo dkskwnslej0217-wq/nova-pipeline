@@ -277,6 +277,23 @@ export default async function handler(req) {
       await tg(`⚠️ Threads 발행 오류: ${e.message}`);
     }
 
+    // Instagram 발행
+    try {
+      const igRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-instagram', {
+        method: 'POST',
+        headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: final.slice(0, 2200) }),
+      });
+      const igData = await igRes.json();
+      if (igData.ok) {
+        await tg(`📸 Instagram 발행 완료 (post_id: ${igData.post_id})`);
+      } else {
+        await tg(`⚠️ Instagram 발행 실패: ${igData.error}`);
+      }
+    } catch(e) {
+      await tg(`⚠️ Instagram 발행 오류: ${e.message}`);
+    }
+
     // 성공 알림
     await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${final.slice(0, 300)}...`);
 
