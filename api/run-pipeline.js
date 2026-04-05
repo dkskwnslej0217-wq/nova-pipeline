@@ -15,6 +15,13 @@ const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
 const GITHUB_REPO     = process.env.GITHUB_REPO || 'dkskwnslej0217-wq/nova-pipeline';
 
+// 토큰 만료일 (Unix timestamp) — Vercel 환경변수로 관리
+const TOKEN_EXPIRES = {
+  threads:   process.env.THREADS_TOKEN_EXPIRES_AT,
+  instagram: process.env.INSTAGRAM_TOKEN_EXPIRES_AT,
+  facebook:  process.env.FACEBOOK_TOKEN_EXPIRES_AT,
+};
+
 // ─── 중국어/외계어 제거 필터 ──────────────────────────────
 function filterKoreanOnly(text) {
   return text
@@ -65,6 +72,17 @@ async function extractKeywords(titles) {
   return data.candidates[0].content.parts[0].text.trim();
 }
 
+// ─── 콘텐츠 타입 랜덤 선택 ────────────────────────────────
+function getContentType() {
+  const types = [
+    { name: '공감형', hook: '읽자마자 "나 이거 완전 공감"이 나오는 훅. 자기 경험 고백처럼.', body: '실제 겪은 일처럼 구체적으로. "나도 그랬는데" 느낌.' },
+    { name: '질문형', hook: '궁금해서 멈추게 되는 질문으로 시작하는 훅.', body: '질문에 대한 내 생각 짧게. 마지막에 "어때?" "너는?" 식으로 물어봐.' },
+    { name: '정보형', hook: '"이거 몰랐으면 큰일날 뻔" 느낌의 훅.', body: '실용적인 팁 2~3가지. 번호 없이 자연스럽게.' },
+    { name: '고백형', hook: '"사실 나..." 로 시작하는 솔직한 고백 훅.', body: '창업하면서 겪은 현실적인 이야기. 포장 없이 솔직하게.' },
+  ];
+  return types[Math.floor(Math.random() * types.length)];
+}
+
 // ─── 14c: Groq 훅 초안 ───────────────────────────────────
 async function generateHooks(keywords) {
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -74,7 +92,7 @@ async function generateHooks(keywords) {
       model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: '너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽하게 지켜. 카톡 말투로 짧게 써. AI 티 나면 안 됨. "~요" "~습니다" 금지. "ㅋㅋ" "ㄹㅇ" "진짜" "솔직히" 같은 자연스러운 표현 써. 한국어만.' },
-        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개만. 각 40자 이내. 번호 없이. 읽자마자 공감되는 문장으로.` }
+        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개만. 각 40자 이내. 번호 없이. 읽자마자 멈추게 되는 문장으로.` }
       ],
       max_tokens: 400,
     }),
@@ -86,7 +104,8 @@ async function generateHooks(keywords) {
 
 // ─── 14d: 최종 완성 (Groq 우선 → 실패 시 Claude 폴백) ──────
 async function finalizeContent(keywords, hooks) {
-  const prompt = `너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽히 지켜. 한국어만 써.\n\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n위 훅 중 1개 골라서 스레드 글 완성해:\n- 첫줄: 훅 문장 (짧고 임팩트 있게)\n- 본문: 2~3줄, 실제 경험담처럼 구체적으로\n- 마지막: 질문 or 공감 유도 1줄\n\n규칙:\n- "~요" "~습니다" "안녕하세요" 절대 금지\n- AI 느낌 나는 표현 금지 (예: "오늘은~", "여러분~", "함께~")\n- 진짜 사람이 쓴 것처럼\n- 총 150자 이내\n- 이모지 1~2개만`;
+  const type = getContentType();
+  const prompt = `너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽히 지켜. 한국어만 써.\n\n오늘 콘텐츠 타입: ${type.name}\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n위 훅 중 1개 골라서 스레드 글 완성해:\n- 첫줄: 훅 (${type.hook})\n- 본문: 2~3줄 (${type.body})\n- 마지막: 공감 유도 or 질문 1줄\n\n규칙:\n- "~요" "~습니다" "안녕하세요" "오늘은" "여러분" 절대 금지\n- AI 느낌 나는 표현 금지\n- 진짜 사람이 쓴 것처럼\n- 총 150자 이내\n- 이모지 1~2개만`;
 
   // 1차: Groq (무료)
   try {
@@ -184,6 +203,18 @@ export default async function handler(req, res) {
       body: JSON.stringify({}),
     });
   } catch { /* 동기화 실패는 파이프라인 중단 안 함 */ }
+
+  // 토큰 만료 7일 전 경고
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  for (const [platform, expiresAt] of Object.entries(TOKEN_EXPIRES)) {
+    if (!expiresAt) continue;
+    const exp = parseInt(expiresAt) * 1000;
+    const daysLeft = Math.floor((exp - now) / (24 * 60 * 60 * 1000));
+    if (daysLeft <= 7) {
+      await tg(`⚠️ ${platform.toUpperCase()} 토큰 만료 ${daysLeft}일 전! 지금 갱신하세요.`);
+    }
+  }
 
   const startedAt = new Date().toISOString();
   await tg(`🚀 NOVA 파이프라인 시작 (${startedAt.slice(0, 16)})`);
