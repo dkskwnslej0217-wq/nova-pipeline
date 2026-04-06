@@ -291,22 +291,22 @@ export default async function handler(req, res) {
       await tg(`⚠️ 영상 트리거 오류: ${e.message}`);
     }
 
-    // Threads 발행
-    try {
-      const threadsRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-threads', {
-        method: 'POST',
-        headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: final.slice(0, 500) }),
-      });
-      const threadsData = await threadsRes.json();
-      if (threadsData.ok) {
-        await tg(`📱 Threads 발행 완료 (post_id: ${threadsData.post_id})`);
-      } else {
-        await tg(`⚠️ Threads 발행 실패: ${threadsData.error}`);
-      }
-    } catch(e) {
-      await tg(`⚠️ Threads 발행 오류: ${e.message}`);
-    }
+    // Threads 발행 — 차단 중 비활성화
+    // try {
+    //   const threadsRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-threads', {
+    //     method: 'POST',
+    //     headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ text: final.slice(0, 500) }),
+    //   });
+    //   const threadsData = await threadsRes.json();
+    //   if (threadsData.ok) {
+    //     await tg(`📱 Threads 발행 완료 (post_id: ${threadsData.post_id})`);
+    //   } else {
+    //     await tg(`⚠️ Threads 발행 실패: ${threadsData.error}`);
+    //   }
+    // } catch(e) {
+    //   await tg(`⚠️ Threads 발행 오류: ${e.message}`);
+    // }
 
     // Instagram 발행
     try {
