@@ -1,0 +1,38 @@
+name: Create Video
+
+on:
+  repository_dispatch:
+    types: [create-video]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 의존성 설치
+        run: npm install
+
+      - name: FFmpeg 설치
+        run: sudo apt-get install -y ffmpeg
+
+      - name: 영상 생성 및 YouTube 업로드
+        env:
+          SCRIPT_TEXT: ${{ github.event.client_payload.text }}
+          SCRIPT_TITLE: ${{ github.event.client_payload.title }}
+          SCRIPT_TAGS: ${{ github.event.client_payload.tags }}
+          GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/generate_video.js
