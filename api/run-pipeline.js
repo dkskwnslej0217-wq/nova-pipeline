@@ -294,7 +294,7 @@ async function saveToSupabase(topic, content) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        hash: btoa(topic).slice(0, 32),
+        hash: `${btoa(encodeURIComponent(topic)).slice(0, 24)}_${Date.now()}`,
         topic,
         content: content.slice(0, 1000),
         score: 1,
@@ -369,8 +369,8 @@ export default async function handler(req, res) {
       fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패\n${e.message}`); return []; }),
       fetchInstagramTop().catch(() => []),
     ]);
-    await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 · 인스타 상위 ${igTop.length}개 수집 완료`);
-    saveTrends(hnTrends, ghTrends, redditTrends).catch(() => {});
+    await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 · 인스타 ${igTop.length}개 수집 완료`);
+    saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
 
     // 14b Gemini
     let keywords;

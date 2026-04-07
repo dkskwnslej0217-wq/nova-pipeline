@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'BASE=\"$HOME/Desktop/nova-pipeline/memory\"; FLAG=\"$BASE/.loaded_${PPID}\"; [ -f \"$FLAG\" ] && exit 0; touch \"$FLAG\"; echo \"=== [현재 상태] ===\"; cat \"$BASE/L1_state.md\" 2>/dev/null; echo \"===\"; exit 0'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"$CLAUDE_TOOL_INPUT\" | grep -qi \"\\.env\" && echo \"BLOCKED: .env 읽기 금지\" >&2 && exit 2 || exit 0'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'BASE=\"$HOME/Desktop/nova-pipeline/memory\"; rm -f \"$BASE/.loaded_${PPID}\" 2>/dev/null; DATE=$(date \"+%Y-%m-%d %H:%M\"); echo \"last_seen: $DATE\" > \"$BASE/last_session.md\"; exit 0'"
+          }
+        ]
+      }
+    ]
+  }
+}

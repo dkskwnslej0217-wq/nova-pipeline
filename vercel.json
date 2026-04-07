@@ -1,7 +1,6 @@
 {
   "crons": [
     { "path": "/api/healthcheck?notify=1", "schedule": "0 0 * * *" },
-    { "path": "/api/run-pipeline", "schedule": "0 9 * * *" },
-    { "path": "/api/weekly-report", "schedule": "0 9 * * 1" }
+    { "path": "/api/weekly-report", "schedule": "0 0 * * 1" }
   ]
 }

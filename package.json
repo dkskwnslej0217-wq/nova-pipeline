@@ -5,5 +5,9 @@
   },
   "scripts": {
     "test": "node test_pipeline.js"
+  },
+  "devDependencies": {
+    "canvas": "^3.2.3",
+    "sharp": "^0.34.5"
   }
 }

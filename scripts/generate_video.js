@@ -90,7 +90,7 @@ async function downloadClip(query, index, fallbackIndex = 0) {
 
   if (!file?.link) throw new Error(`영상 URL 없음: ${query}`);
 
-  const dlRes = await fetch(file.link);
+  const dlRes = await fetch(file.link, { signal: AbortSignal.timeout(60000) });
   if (!dlRes.ok) throw new Error(`다운로드 실패: ${dlRes.status}`);
   const buf = await dlRes.arrayBuffer();
   const path = `clip_${index}.mp4`;

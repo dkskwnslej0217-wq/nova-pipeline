@@ -9,3 +9,5 @@ output/video/*.wav
 *.mp3
 *.wav
 .vercel
+
+.vercel
