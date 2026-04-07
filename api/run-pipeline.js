@@ -75,12 +75,55 @@ async function extractKeywords(titles) {
 // ─── 콘텐츠 타입 랜덤 선택 ────────────────────────────────
 function getContentType() {
   const types = [
-    { name: '공감형', hook: '읽자마자 "나 이거 완전 공감"이 나오는 훅. 자기 경험 고백처럼.', body: '실제 겪은 일처럼 구체적으로. "나도 그랬는데" 느낌.' },
-    { name: '질문형', hook: '궁금해서 멈추게 되는 질문으로 시작하는 훅.', body: '질문에 대한 내 생각 짧게. 마지막에 "어때?" "너는?" 식으로 물어봐.' },
-    { name: '정보형', hook: '"이거 몰랐으면 큰일날 뻔" 느낌의 훅.', body: '실용적인 팁 2~3가지. 번호 없이 자연스럽게.' },
-    { name: '고백형', hook: '"사실 나..." 로 시작하는 솔직한 고백 훅.', body: '창업하면서 겪은 현실적인 이야기. 포장 없이 솔직하게.' },
+    { name: '공감형', hook: '많은 사람이 겪는 상황을 콕 집어서 시작. "나만 그런 거 아니었구나" 느낌.', body: '구체적인 상황 묘사. 감정 솔직하게. 억지 긍정 없이.' },
+    { name: '정보형', hook: '몰랐으면 손해볼 뻔한 정보. 제목처럼 명확하게.', body: '핵심 정보 2~3가지. 짧고 실용적으로. 리스트 말고 문장으로.' },
+    { name: '스토리형', hook: '실제로 있었던 일처럼 시작. "지난주에..." "어제..." 식으로.', body: '상황 → 문제 → 깨달음 흐름. 결말은 열린 질문으로.' },
+    { name: '도발형', hook: '흔한 믿음을 정면으로 반박. "사실 이건 틀렸어" 식으로.', body: '왜 틀렸는지 근거 1~2개. 내 경험 또는 데이터로.' },
   ];
   return types[Math.floor(Math.random() * types.length)];
+}
+
+// ─── 플랫폼별 프롬프트 ────────────────────────────────────
+function getPlatformPrompts(keywords, hooks, type) {
+  const base = `맞춤법 완벽히 지켜. 한국어만. 오타 절대 금지.
+절대 금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론" "당연히"
+AI 느낌 나는 표현 금지. 진짜 사람이 쓴 것처럼.
+키워드: ${keywords}
+훅 후보: ${hooks}
+콘텐츠 타입: ${type.name} — ${type.hook}`;
+
+  return {
+    // Instagram: 감성적, 짧고 임팩트, 줄바꿈 활용
+    instagram: `${base}
+
+Instagram 캡션 작성:
+- 첫 줄: 스크롤 멈추게 하는 훅 (20자 이내)
+- 본문: 2~3줄, 줄바꿈으로 호흡 나눠서
+- 마지막: 저장하게 만드는 한 줄 or 질문
+- 이모지 2~3개 자연스럽게
+- 총 100자 이내
+- 해시태그 없이 (따로 붙임)`,
+
+    // Facebook: 스토리텔링, 조금 더 길어도 됨, 공유 유도
+    facebook: `${base}
+
+Facebook 게시글 작성:
+- 첫 줄: 읽고 싶게 만드는 훅
+- 본문: 3~4줄, 스토리나 정보 중심
+- 마지막: 댓글 달게 만드는 질문 or 공유 유도
+- 이모지 1~2개
+- 총 150자 이내`,
+
+    // YouTube: 명확한 주제, 자연스러운 나레이션 스타일
+    youtube: `${base}
+
+YouTube 나레이션 스크립트 작성:
+- 도입: 3초 안에 궁금하게 만드는 한 문장
+- 본문: 핵심 내용 3~4문장, 자연스럽게 말하듯이
+- 마지막: 구독/좋아요 유도 없이 여운 있는 마무리
+- 총 150자 이내
+- 오타, 비문 절대 금지`,
+  };
 }
 
 // ─── 14c: Groq 훅 초안 ───────────────────────────────────
@@ -91,10 +134,10 @@ async function generateHooks(keywords) {
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       messages: [
-        { role: 'system', content: '너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽하게 지켜. 카톡 말투로 짧게 써. AI 티 나면 안 됨. "~요" "~습니다" 금지. "ㅋㅋ" "ㄹㅇ" "진짜" "솔직히" 같은 자연스러운 표현 써. 한국어만.' },
-        { role: 'user', content: `키워드: ${keywords}\n\n스레드 첫 줄 훅 3개만. 각 40자 이내. 번호 없이. 읽자마자 멈추게 되는 문장으로.` }
+        { role: 'system', content: '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 없음. AI 티 절대 금지. 진짜 사람 말투. 한국어만.' },
+        { role: 'user', content: `키워드: ${keywords}\n\n첫 줄 훅 3개. 각 25자 이내. 번호 없이. 스크롤 멈추게 되는 문장으로. 오타 없이.` }
       ],
-      max_tokens: 400,
+      max_tokens: 300,
     }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}`);
@@ -105,43 +148,48 @@ async function generateHooks(keywords) {
 // ─── 14d: 최종 완성 (Groq 우선 → 실패 시 Claude 폴백) ──────
 async function finalizeContent(keywords, hooks) {
   const type = getContentType();
-  const prompt = `너는 SNS에 매일 글 올리는 30대 한국 1인 창업자야. 맞춤법 완벽히 지켜. 한국어만 써.\n\n오늘 콘텐츠 타입: ${type.name}\n키워드: ${keywords}\n\n훅 후보:\n${hooks}\n\n위 훅 중 1개 골라서 스레드 글 완성해:\n- 첫줄: 훅 (${type.hook})\n- 본문: 2~3줄 (${type.body})\n- 마지막: 공감 유도 or 질문 1줄\n\n규칙:\n- "~요" "~습니다" "안녕하세요" "오늘은" "여러분" 절대 금지\n- AI 느낌 나는 표현 금지\n- 진짜 사람이 쓴 것처럼\n- 총 150자 이내\n- 이모지 1~2개만`;
+  const prompts = getPlatformPrompts(keywords, hooks, type);
 
-  // 1차: Groq (무료)
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  // Instagram/Facebook/YouTube 각각 생성
+  async function generate(prompt) {
+    // 1차: Groq
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 500,
+          temperature: 0.8,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.choices[0].message.content;
+      }
+    } catch { /* 폴백 */ }
+
+    // 2차: Claude
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 800,
-      }),
+      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return data.choices[0].message.content;
-    }
-  } catch { /* Groq 실패 → Claude 폴백 */ }
+    if (!res.ok) throw new Error(`Claude ${res.status}`);
+    const data = await res.json();
+    return data.content[0].text;
+  }
 
-  // 2차: Claude Haiku (유료 폴백)
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Claude ${res.status}`);
-  const data = await res.json();
-  return data.content[0].text;
+  const [igText, fbText, ytText] = await Promise.all([
+    generate(prompts.instagram),
+    generate(prompts.facebook),
+    generate(prompts.youtube),
+  ]);
+
+  return { igText, fbText, ytText };
 }
+
 
 // ─── Supabase 저장 ────────────────────────────────────────
 async function saveToSupabase(topic, content) {
@@ -243,19 +291,21 @@ export default async function handler(req, res) {
     const hooksRaw = await generateHooks(keywords);
     const hooks = filterKoreanOnly(hooksRaw);
 
-    // 14d Claude
-    const finalRaw = await finalizeContent(keywords, hooks);
-    const final = filterKoreanOnly(finalRaw);
+    // 14d 콘텐츠 생성 (플랫폼별)
+    const { igText, fbText, ytText } = await finalizeContent(keywords, hooks);
+    const igFinal = filterKoreanOnly(igText);
+    const fbFinal = filterKoreanOnly(fbText);
+    const ytFinal = filterKoreanOnly(ytText);
 
     // Supabase 저장
     const topic = keywords.split(',')[0].trim();
-    await saveToSupabase(topic, final);
+    await saveToSupabase(topic, igFinal);
 
-    // 플랫폼별 콘텐츠 최적화
+    // 플랫폼별 콘텐츠
     const hashtagList = keywords.split(',').map(k => `#${k.trim().replace(/\s/g, '')}`).join(' ');
-    const igContent = `${final}\n\n${hashtagList}`.slice(0, 2200);  // Instagram: 본문 + 해시태그
-    const fbContent = final;                                          // Facebook: 본문만 (이미지 자동 추가됨)
-    const threadsContent = final.slice(0, 500);                       // Threads: 500자 제한
+    const igContent = `${igFinal}\n\n${hashtagList}`.slice(0, 2200);  // Instagram: 본문 + 해시태그
+    const fbContent = fbFinal;                                          // Facebook: 본문만
+    const threadsContent = igFinal.slice(0, 500);                       // Threads: 500자 제한
 
     // 유저 수 체크 → 100명 도달 시 알림
     try {
@@ -282,7 +332,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             event_type: 'create-video',
             client_payload: {
-              text: final.slice(0, 2500),
+              text: ytFinal.slice(0, 2500),
               title: `NOVA AI — ${topic}`,
               tags: keywords.split(',').map(k => k.trim()).join(','),
             },
@@ -350,7 +400,7 @@ export default async function handler(req, res) {
     }
 
     // 성공 알림
-    await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${final.slice(0, 300)}...`);
+    await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${igFinal.slice(0, 300)}...`);
 
     return res.status(200).json({ ok: true, topic, keywords });
 
