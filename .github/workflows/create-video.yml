@@ -3,6 +3,20 @@ name: Create Video
 on:
   repository_dispatch:
     types: [create-video]
+  workflow_dispatch:
+    inputs:
+      text:
+        description: '스크립트 텍스트'
+        required: false
+        default: 'AI 자동화 테스트 영상입니다.'
+      title:
+        description: '영상 제목'
+        required: false
+        default: 'NOVA AI 테스트'
+      tags:
+        description: '태그'
+        required: false
+        default: 'AI,자동화,테스트'
 
 jobs:
   build:
