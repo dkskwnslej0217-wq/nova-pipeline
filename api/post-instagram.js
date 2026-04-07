@@ -6,9 +6,11 @@ const IG_ACCOUNT_ID = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 
 function buildImageUrl(text) {
-  // 첫 30자로 프롬프트 생성 (영어로 변환 안 해도 Pollinations가 처리)
-  const prompt = encodeURIComponent(text.slice(0, 60) + ', Korean SNS style, vibrant, minimal');
-  return `https://image.pollinations.ai/prompt/${prompt}?width=1080&height=1080&nologo=true`;
+  const prompt = encodeURIComponent(
+    text.slice(0, 60) +
+    ', Korean aesthetic, modern minimalist, high quality, cinematic lighting, 4k, no text, no watermark'
+  );
+  return `https://image.pollinations.ai/prompt/${prompt}?width=1080&height=1080&nologo=true&model=flux&enhance=true`;
 }
 
 async function postToInstagram(text, retry = 0) {
