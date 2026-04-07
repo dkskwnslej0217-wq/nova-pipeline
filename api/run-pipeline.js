@@ -366,8 +366,8 @@ export default async function handler(req, res) {
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
       fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
-      fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패\n${e.message}`); return []; }),
-      fetchInstagramTop().catch(() => []),
+      fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패 → 폴백\n${e.message}`); return []; }),
+      fetchInstagramTop().catch(e => { tg(`⚠️ 인스타 분석 실패 (권한 확인 필요)\n${e.message}`); return []; }),
     ]);
     await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 · 인스타 ${igTop.length}개 수집 완료`);
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));

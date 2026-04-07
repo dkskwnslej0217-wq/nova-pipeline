@@ -50,6 +50,13 @@ export default async function handler(req, res) {
       `  • Reddit: ${rdCount}개\n\n` +
       `🤖 파이프라인 정상 운영 중`;
 
+    // 30일 지난 트렌드 자동 삭제
+    await fetch(`${SUPA_URL}/rest/v1/rpc/delete_old_trends`, {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).catch(() => {});
+
     await tg(report);
     return res.status(200).json({ ok: true, postCount, hnCount, ghCount, rdCount });
 
