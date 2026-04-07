@@ -56,6 +56,38 @@ async function fetchTrending() {
   return data.items.map(i => i.snippet.title);
 }
 
+// ─── 인스타 상위 게시물 분석 ──────────────────────────────
+async function fetchInstagramTop() {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const igId  = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
+  if (!token || !igId) return [];
+  const res = await fetch(
+    `https://graph.instagram.com/v21.0/${igId}/media?fields=caption,like_count&limit=20&access_token=${token}`
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.data || [])
+    .filter(p => p.like_count > 0)
+    .sort((a, b) => b.like_count - a.like_count)
+    .slice(0, 5)
+    .map(p => `좋아요${p.like_count}: ${(p.caption || '').split('\n')[0].slice(0, 50)}`);
+}
+
+// ─── Supabase 트렌드 누적 저장 ───────────────────────────
+async function saveTrends(hnTrends, ghTrends, redditTrends) {
+  const items = [
+    ...hnTrends.map(t => ({ source: 'hn', title: t.slice(0, 200) })),
+    ...ghTrends.map(t => ({ source: 'github', title: t.slice(0, 200) })),
+    ...redditTrends.map(t => ({ source: 'reddit', title: t.slice(0, 200) })),
+  ];
+  if (!items.length) return;
+  await fetch(`${SUPA_URL}/rest/v1/trends`, {
+    method: 'POST',
+    headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(items),
+  });
+}
+
 // ─── 14a-2: Reddit AI 트렌드 ─────────────────────────────
 async function fetchRedditTrends() {
   const subs = ['artificial', 'ChatGPT', 'SideProject'];
@@ -108,12 +140,13 @@ async function fetchGitHubTrends() {
 }
 
 // ─── 14b: Gemini 키워드 추출 ─────────────────────────────
-async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = []) {
+async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = []) {
   const ytSection = titles?.length ? `[한국 유튜브 인기]\n${titles.join('\n')}` : '';
   const hnSection = hnTrends.length ? `[HackerNews AI 트렌드]\n${hnTrends.join('\n')}` : '';
   const ghSection = ghTrends.length ? `[GitHub AI 인기 레포]\n${ghTrends.join('\n')}` : '';
   const rdSection = redditTrends.length ? `[Reddit AI 커뮤니티 반응]\n${redditTrends.join('\n')}` : '';
-  const context = [ytSection, hnSection, ghSection, rdSection].filter(Boolean).join('\n\n');
+  const igSection = igTop.length ? `[내 인스타 반응 좋은 글 패턴]\n${igTop.join('\n')}` : '';
+  const context = [ytSection, hnSection, ghSection, rdSection, igSection].filter(Boolean).join('\n\n');
 
   const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
@@ -329,18 +362,20 @@ export default async function handler(req, res) {
 
   try {
     // 14a 트렌드 수집 (YouTube + HackerNews + GitHub 병렬)
-    const [titles, hnTrends, ghTrends, redditTrends] = await Promise.all([
+    const [titles, hnTrends, ghTrends, redditTrends, igTop] = await Promise.all([
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
       fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
       fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패\n${e.message}`); return []; }),
+      fetchInstagramTop().catch(() => []),
     ]);
-    await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 수집 완료`);
+    await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 · 인스타 상위 ${igTop.length}개 수집 완료`);
+    saveTrends(hnTrends, ghTrends, redditTrends).catch(() => {});
 
     // 14b Gemini
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends, redditTrends);
+      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends, redditTrends, igTop);
     } catch(e) {
       await tg(`⚠️ Gemini 실패 → 기본 키워드 사용\n${e.message}`);
       keywords = 'AI자동화, 콘텐츠수익, 1인창업, SNS마케팅';
