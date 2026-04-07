@@ -39,9 +39,9 @@ jobs:
 
       - name: 영상 생성 및 YouTube 업로드
         env:
-          SCRIPT_TEXT: ${{ github.event.client_payload.text }}
-          SCRIPT_TITLE: ${{ github.event.client_payload.title }}
-          SCRIPT_TAGS: ${{ github.event.client_payload.tags }}
+          SCRIPT_TEXT: ${{ github.event.client_payload.text || github.event.inputs.text }}
+          SCRIPT_TITLE: ${{ github.event.client_payload.title || github.event.inputs.title }}
+          SCRIPT_TAGS: ${{ github.event.client_payload.tags || github.event.inputs.tags }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
