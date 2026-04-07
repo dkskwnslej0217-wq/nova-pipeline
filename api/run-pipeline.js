@@ -56,9 +56,44 @@ async function fetchTrending() {
   return data.items.map(i => i.snippet.title);
 }
 
+// ─── 14a-2: HackerNews AI 트렌드 ─────────────────────────
+async function fetchHNTrends() {
+  const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
+  if (!idsRes.ok) throw new Error(`HN ${idsRes.status}`);
+  const ids = await idsRes.json();
+
+  const stories = await Promise.all(
+    ids.slice(0, 30).map(id =>
+      fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json()).catch(() => null)
+    )
+  );
+
+  const aiKeywords = ['ai', 'llm', 'gpt', 'automation', 'agent', 'claude', 'openai', 'gemini', 'workflow', 'machine learning'];
+  return stories
+    .filter(s => s?.title && aiKeywords.some(k => s.title.toLowerCase().includes(k)))
+    .slice(0, 5)
+    .map(s => s.title);
+}
+
+// ─── 14a-3: GitHub AI 트렌딩 레포 ────────────────────────
+async function fetchGitHubTrends() {
+  const res = await fetch(
+    'https://api.github.com/search/repositories?q=topic:artificial-intelligence+topic:automation&sort=stars&order=desc&per_page=5',
+    { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${GITHUB_TOKEN}` } }
+  );
+  if (!res.ok) throw new Error(`GitHub ${res.status}`);
+  const data = await res.json();
+  return (data.items || []).map(r => `${r.name}: ${r.description || ''}`).slice(0, 5);
+}
+
 // ─── 14b: Gemini 키워드 추출 ─────────────────────────────
-async function extractKeywords(titles) {
-  const prompt = `아래는 현재 한국 유튜브 급상승 영상 제목들입니다:\n${titles.join('\n')}\n\n"AI 부업 자동화" 분야 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
+async function extractKeywords(titles, hnTrends = [], ghTrends = []) {
+  const ytSection = titles.length ? `[한국 유튜브 인기]\n${titles.join('\n')}` : '';
+  const hnSection = hnTrends.length ? `[HackerNews AI 트렌드]\n${hnTrends.join('\n')}` : '';
+  const ghSection = ghTrends.length ? `[GitHub AI 인기 레포]\n${ghTrends.join('\n')}` : '';
+  const context = [ytSection, hnSection, ghSection].filter(Boolean).join('\n\n');
+
+  const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
     {
@@ -271,19 +306,18 @@ export default async function handler(req, res) {
   await tg(`🚀 NOVA 파이프라인 시작 (${startedAt.slice(0, 16)})`);
 
   try {
-    // 14a YouTube
-    let titles;
-    try {
-      titles = await fetchTrending();
-    } catch(e) {
-      await tg(`⚠️ YouTube 수집 실패 → 기본 주제로 폴백\n${e.message}`);
-      titles = null;
-    }
+    // 14a 트렌드 수집 (YouTube + HackerNews + GitHub 병렬)
+    const [titles, hnTrends, ghTrends] = await Promise.all([
+      fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
+      fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
+      fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
+    ]);
+    if (hnTrends.length) await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 트렌드 수집 완료`);
 
     // 14b Gemini
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업']);
+      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends);
     } catch(e) {
       await tg(`⚠️ Gemini 실패 → 기본 키워드 사용\n${e.message}`);
       keywords = 'AI자동화, 콘텐츠수익, 1인창업, SNS마케팅';
