@@ -103,7 +103,7 @@ export default async function handler(req) {
     }).catch(() => {});
   }
 
-  // 전체 정상이면 간단 OK 알림 (하루 1번)
+  // 전체 정상이면 간단 OK 알림 + 일일 요약 (하루 1번)
   if (failures.length === 0 && TG_TOKEN && TG_CHAT && url.searchParams.get('notify') === '1') {
     const lines = results.map(r => `✅ ${r.name}: ${r.msg}`).join('\n');
     await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
@@ -115,6 +115,37 @@ export default async function handler(req) {
         parse_mode: 'HTML',
       }),
     }).catch(() => {});
+
+    // 일일 요약 (alert summary 통합)
+    try {
+      const SUPA_URL = process.env.SUPABASE_URL;
+      const SUPA_KEY = process.env.SUPABASE_SERVICE_KEY;
+      const h = { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` };
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [usersRes, newUsersRes] = await Promise.all([
+        fetch(`${SUPA_URL}/rest/v1/users?select=plan_type,daily_count`, { headers: h }),
+        fetch(`${SUPA_URL}/rest/v1/users?created_at=gt.${yesterday}&select=user_id`, { headers: h }),
+      ]);
+      const users = await usersRes.json();
+      const newUsers = await newUsersRes.json();
+      const planCounts = { free: 0, starter: 0, pro: 0 };
+      let totalChats = 0;
+      for (const u of (Array.isArray(users) ? users : [])) {
+        planCounts[u.plan_type || 'free'] = (planCounts[u.plan_type || 'free'] || 0) + 1;
+        totalChats += u.daily_count || 0;
+      }
+      const totalUsers = planCounts.free + planCounts.starter + planCounts.pro;
+      const monthlyRevenue = planCounts.starter * 4900 + planCounts.pro * 14900;
+      await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TG_CHAT,
+          text: `📊 <b>NOVA 일일 요약</b>\n\n👥 총 유저: <b>${totalUsers}명</b> (+${Array.isArray(newUsers) ? newUsers.length : 0} 신규)\n⚪ 무료: ${planCounts.free}명 · 💙 스타터: ${planCounts.starter}명 · 💜 프로: ${planCounts.pro}명\n💬 오늘 채팅: <b>${totalChats}회</b>\n💰 월 예상 수익: <b>₩${monthlyRevenue.toLocaleString('ko-KR')}</b>`,
+          parse_mode: 'HTML',
+        }),
+      }).catch(() => {});
+    } catch { /* 요약 실패는 무시 */ }
   }
 
   return new Response(JSON.stringify({
