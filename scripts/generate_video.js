@@ -23,7 +23,7 @@ async function run() {
       body: JSON.stringify({
         input: { text: (SCRIPT_TEXT || '').slice(0, 2500) },
         voice: { languageCode: 'ko-KR', name: 'ko-KR-Neural2-A', ssmlGender: 'FEMALE' },
-        audioConfig: { audioEncoding: 'MP3', speakingRate: 1.05 }
+        audioConfig: { audioEncoding: 'LINEAR16', speakingRate: 1.05 }
       })
     }
   );
@@ -33,8 +33,8 @@ async function run() {
   }
   const ttsData = await ttsRes.json();
   const binary = Buffer.from(ttsData.audioContent, 'base64');
-  fs.writeFileSync('audio.mp3', binary);
-  console.log('✅ audio.mp3 저장 완료');
+  fs.writeFileSync('audio.wav', binary);
+  console.log('✅ audio.wav 저장 완료');
 
   // 2. Pexels → background.jpg
   console.log('🖼️ 배경 이미지 다운로드 중...');
@@ -53,7 +53,7 @@ async function run() {
   // 3. FFmpeg → output.mp4
   console.log('🎬 영상 합성 중...');
   execSync(
-    'ffmpeg -y -loop 1 -i background.jpg -i audio.mp3 ' +
+    'ffmpeg -y -loop 1 -i background.jpg -i audio.wav ' +
     '-c:v libx264 -tune stillimage -c:a aac -b:a 192k ' +
     '-pix_fmt yuv420p -vf scale=1920:1080 -shortest output.mp4'
   );
