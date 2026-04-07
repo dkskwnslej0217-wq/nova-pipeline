@@ -250,6 +250,12 @@ export default async function handler(req, res) {
     const topic = keywords.split(',')[0].trim();
     await saveToSupabase(topic, final);
 
+    // 플랫폼별 콘텐츠 최적화
+    const hashtagList = keywords.split(',').map(k => `#${k.trim().replace(/\s/g, '')}`).join(' ');
+    const igContent = `${final}\n\n${hashtagList}`.slice(0, 2200);  // Instagram: 본문 + 해시태그
+    const fbContent = final;                                          // Facebook: 본문만 (이미지 자동 추가됨)
+    const threadsContent = final.slice(0, 500);                       // Threads: 500자 제한
+
     // 유저 수 체크 → 100명 도달 시 알림
     try {
       const userRes = await fetch(`${SUPA_URL}/rest/v1/users?select=count`, {
@@ -313,7 +319,7 @@ export default async function handler(req, res) {
       const igRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-instagram', {
         method: 'POST',
         headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: final.slice(0, 2200) }),
+        body: JSON.stringify({ text: igContent }),
       });
       const igData = await igRes.json();
       if (igData.ok) {
@@ -330,7 +336,7 @@ export default async function handler(req, res) {
       const fbRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-facebook', {
         method: 'POST',
         headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: final }),
+        body: JSON.stringify({ text: fbContent }),
       });
       const fbData = await fbRes.json();
       if (fbData.ok) {

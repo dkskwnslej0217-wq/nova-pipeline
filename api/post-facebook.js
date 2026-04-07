@@ -5,14 +5,21 @@ const FB_TOKEN   = process.env.FACEBOOK_ACCESS_TOKEN;
 const FB_PAGE_ID = process.env.FACEBOOK_PAGE_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 
+function buildImageUrl(text) {
+  const prompt = encodeURIComponent(text.slice(0, 60) + ', Korean SNS style, vibrant, minimal');
+  return `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=630&nologo=true`;
+}
+
 async function postToFacebook(text) {
+  const imageUrl = buildImageUrl(text);
   const res = await fetch(
-    `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/feed`,
+    `https://graph.facebook.com/v25.0/${FB_PAGE_ID}/photos`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: text.slice(0, 63206),
+        url: imageUrl,
+        caption: text.slice(0, 63206),
         access_token: FB_TOKEN,
       }),
     }
