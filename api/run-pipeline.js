@@ -58,7 +58,7 @@ async function fetchTrending() {
 
 // ─── 14b: Gemini 키워드 추출 ─────────────────────────────
 async function extractKeywords(titles) {
-  const prompt = `아래는 현재 한국 유튜브 급상승 영상 제목들입니다:\n${titles.join('\n')}\n\nSNS 콘텐츠(스레드/인스타/유튜브쇼츠)에 활용할 핵심 키워드 5개 추출. 단어만, 쉼표 구분.`;
+  const prompt = `아래는 현재 한국 유튜브 급상승 영상 제목들입니다:\n${titles.join('\n')}\n\n"AI 부업 자동화" 분야 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
     {
@@ -85,42 +85,44 @@ function getContentType() {
 
 // ─── 플랫폼별 프롬프트 ────────────────────────────────────
 function getPlatformPrompts(keywords, hooks, type) {
-  const base = `맞춤법 완벽히 지켜. 한국어만. 오타 절대 금지.
-절대 금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론" "당연히"
-AI 느낌 나는 표현 금지. 진짜 사람이 쓴 것처럼.
+  const base = `
+너는 "AI 부업 자동화" 분야 한국 SNS 전문가야.
+타겟: 월급 받는 직장인, 부업 원하는 20~40대.
+주제: AI 자동화로 시간 아끼고 돈 버는 실용적인 팁.
+
+맞춤법 완벽. 오타 절대 금지. 한국어만.
+절대 금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론" "당연히" "함께해요"
+AI 티 나는 표현 금지. 진짜 직장인이 쓴 것처럼.
 키워드: ${keywords}
 훅 후보: ${hooks}
 콘텐츠 타입: ${type.name} — ${type.hook}`;
 
   return {
-    // Instagram: 감성적, 짧고 임팩트, 줄바꿈 활용
     instagram: `${base}
 
 Instagram 캡션 작성:
-- 첫 줄: 스크롤 멈추게 하는 훅 (20자 이내)
-- 본문: 2~3줄, 줄바꿈으로 호흡 나눠서
-- 마지막: 저장하게 만드는 한 줄 or 질문
-- 이모지 2~3개 자연스럽게
-- 총 100자 이내
-- 해시태그 없이 (따로 붙임)`,
+- 첫 줄: 직장인이 공감하거나 멈출 훅 (20자 이내, 숫자 활용)
+- 본문: 2~3줄, AI 부업/자동화 실용 팁 중심
+- 마지막: 저장하게 만드는 한 줄 ("이거 모르면 손해" 류)
+- 이모지 2~3개
+- 총 120자 이내
+- 해시태그 없이`,
 
-    // Facebook: 스토리텔링, 조금 더 길어도 됨, 공유 유도
     facebook: `${base}
 
 Facebook 게시글 작성:
-- 첫 줄: 읽고 싶게 만드는 훅
-- 본문: 3~4줄, 스토리나 정보 중심
-- 마지막: 댓글 달게 만드는 질문 or 공유 유도
+- 첫 줄: "나도 처음엔 몰랐는데" 식의 공감 훅
+- 본문: AI로 실제로 시간/돈 절약한 사례 스토리 3~4줄
+- 마지막: "너도 해봤어?" 식의 댓글 유도 질문
 - 이모지 1~2개
-- 총 150자 이내`,
+- 총 180자 이내`,
 
-    // YouTube: 명확한 주제, 자연스러운 나레이션 스타일
     youtube: `${base}
 
-YouTube 나레이션 스크립트 작성:
-- 도입: 3초 안에 궁금하게 만드는 한 문장
-- 본문: 핵심 내용 3~4문장, 자연스럽게 말하듯이
-- 마지막: 구독/좋아요 유도 없이 여운 있는 마무리
+YouTube Shorts 나레이션 작성:
+- 첫 문장: "직장 다니면서 이걸로 월 N만원 벌었어" 식의 도입
+- 본문: AI 자동화 팁 3~4문장, 말하듯 자연스럽게
+- 마무리: 여운 있는 한 줄 (구독 유도 없이)
 - 총 150자 이내
 - 오타, 비문 절대 금지`,
   };
@@ -302,7 +304,9 @@ export default async function handler(req, res) {
     await saveToSupabase(topic, igFinal);
 
     // 플랫폼별 콘텐츠
-    const hashtagList = keywords.split(',').map(k => `#${k.trim().replace(/\s/g, '')}`).join(' ');
+    const fixedTags = '#AI부업 #직장인부업 #자동화 #월급외수익 #AI자동화 #부업추천 #재테크 #디지털노마드';
+    const keywordTags = keywords.split(',').map(k => `#${k.trim().replace(/\s/g, '')}`).join(' ');
+    const hashtagList = `${keywordTags} ${fixedTags}`;
     const igContent = `${igFinal}\n\n${hashtagList}`.slice(0, 2200);  // Instagram: 본문 + 해시태그
     const fbContent = fbFinal;                                          // Facebook: 본문만
     const threadsContent = igFinal.slice(0, 500);                       // Threads: 500자 제한
