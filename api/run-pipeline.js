@@ -56,7 +56,28 @@ async function fetchTrending() {
   return data.items.map(i => i.snippet.title);
 }
 
-// ─── 14a-2: HackerNews AI 트렌드 ─────────────────────────
+// ─── 14a-2: Reddit AI 트렌드 ─────────────────────────────
+async function fetchRedditTrends() {
+  const subs = ['artificial', 'ChatGPT', 'SideProject'];
+  const results = [];
+  for (const sub of subs) {
+    try {
+      const res = await fetch(
+        `https://www.reddit.com/r/${sub}/hot.json?limit=5`,
+        { headers: { 'User-Agent': 'nova-pipeline/1.0' } }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const posts = data.data.children
+        .map(p => p.data.title)
+        .filter(t => t.length < 120);
+      results.push(...posts.slice(0, 2));
+    } catch { continue; }
+  }
+  return results.slice(0, 6);
+}
+
+// ─── 14a-3: HackerNews AI 트렌드 ─────────────────────────
 async function fetchHNTrends() {
   const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
   if (!idsRes.ok) throw new Error(`HN ${idsRes.status}`);
@@ -87,11 +108,12 @@ async function fetchGitHubTrends() {
 }
 
 // ─── 14b: Gemini 키워드 추출 ─────────────────────────────
-async function extractKeywords(titles, hnTrends = [], ghTrends = []) {
-  const ytSection = titles.length ? `[한국 유튜브 인기]\n${titles.join('\n')}` : '';
+async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = []) {
+  const ytSection = titles?.length ? `[한국 유튜브 인기]\n${titles.join('\n')}` : '';
   const hnSection = hnTrends.length ? `[HackerNews AI 트렌드]\n${hnTrends.join('\n')}` : '';
   const ghSection = ghTrends.length ? `[GitHub AI 인기 레포]\n${ghTrends.join('\n')}` : '';
-  const context = [ytSection, hnSection, ghSection].filter(Boolean).join('\n\n');
+  const rdSection = redditTrends.length ? `[Reddit AI 커뮤니티 반응]\n${redditTrends.join('\n')}` : '';
+  const context = [ytSection, hnSection, ghSection, rdSection].filter(Boolean).join('\n\n');
 
   const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
@@ -307,17 +329,18 @@ export default async function handler(req, res) {
 
   try {
     // 14a 트렌드 수집 (YouTube + HackerNews + GitHub 병렬)
-    const [titles, hnTrends, ghTrends] = await Promise.all([
+    const [titles, hnTrends, ghTrends, redditTrends] = await Promise.all([
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
       fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
+      fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패\n${e.message}`); return []; }),
     ]);
-    if (hnTrends.length) await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 트렌드 수집 완료`);
+    await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 수집 완료`);
 
     // 14b Gemini
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends);
+      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends, redditTrends);
     } catch(e) {
       await tg(`⚠️ Gemini 실패 → 기본 키워드 사용\n${e.message}`);
       keywords = 'AI자동화, 콘텐츠수익, 1인창업, SNS마케팅';
