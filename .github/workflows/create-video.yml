@@ -34,8 +34,10 @@ jobs:
       - name: 의존성 설치
         run: npm install
 
-      - name: FFmpeg 설치
-        run: sudo apt-get install -y ffmpeg
+      - name: FFmpeg + 한국어 폰트 설치
+        run: |
+          sudo apt-get install -y ffmpeg fonts-nanum fonts-nanum-extra
+          fc-cache -fv
 
       - name: 영상 생성 및 YouTube 업로드
         env:
