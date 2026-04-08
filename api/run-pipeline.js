@@ -65,23 +65,45 @@ async function postChannel(msg) {
 }
 
 // ─── 채널용 트렌드 다이제스트 포맷 ──────────────────────
+const AI_KW = ['ai', 'llm', 'gpt', 'claude', 'gemini', 'openai', 'agent', 'automation', '자동화', 'ml', 'model', 'chatgpt', 'copilot', 'robot', 'neural', '인공지능', 'langchain'];
+
+function isAiRelated(text) {
+  return AI_KW.some(k => text.toLowerCase().includes(k));
+}
+
+function shortenTitle(t) {
+  const clean = t.replace(/Product Hunt.*every day/gi, '').trim();
+  return clean.length > 60 ? clean.slice(0, 57) + '...' : clean;
+}
+
 function formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTrends, keywords) {
   const date = new Date(Date.now() + 9 * 3600000);
   const dateStr = `${date.getMonth() + 1}월 ${date.getDate()}일`;
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   const dayStr = days[date.getDay()];
 
+  // HN: AI 관련만
+  const hnFiltered = hnTrends.filter(t => isAiRelated(t)).slice(0, 3);
+  // PH: 사이트 이름 필터 + 설명 있는 것만
+  const phFiltered = phTrends.filter(t => t.length > 5 && !/product hunt/i.test(t)).slice(0, 3);
+  // 구글: AI 관련 키워드만 (기아·정치 뉴스 제거)
+  const gtFiltered = googleTrends.filter(t => isAiRelated(t)).slice(0, 3);
+  // Reddit: AI 관련만
+  const rdFiltered = redditTrends.filter(t => isAiRelated(t)).slice(0, 2);
+  // GitHub: 그대로 (이미 AI 필터 적용됨)
+  const ghFiltered = ghTrends.slice(0, 2);
+
   const sections = [
-    hnTrends.length     ? `🔥 <b>HackerNews AI</b>\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
-    phTrends.length     ? `🚀 <b>Product Hunt</b>\n${phTrends.slice(0,3).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
-    googleTrends.length ? `🇰🇷 <b>구글 트렌드</b>\n${googleTrends.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
-    redditTrends.length ? `💬 <b>Reddit</b>\n${redditTrends.slice(0,2).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
-    ghTrends.length     ? `⭐ <b>GitHub</b>\n${ghTrends.slice(0,2).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
+    hnFiltered.length  ? `🔥 <b>해외 AI 핫이슈 (HackerNews)</b>\n${hnFiltered.map(t => `• ${shortenTitle(t)}`).join('\n')}` : '',
+    phFiltered.length  ? `🚀 <b>새로 나온 AI 툴 (Product Hunt)</b>\n${phFiltered.map(t => `• ${shortenTitle(t)}`).join('\n')}` : '',
+    gtFiltered.length  ? `🇰🇷 <b>국내 AI 검색 트렌드</b>\n${gtFiltered.map(t => `• ${t}`).join('\n')}` : '',
+    rdFiltered.length  ? `💬 <b>Reddit 반응</b>\n${rdFiltered.map(t => `• ${shortenTitle(t)}`).join('\n')}` : '',
+    ghFiltered.length  ? `⭐ <b>주목받는 AI 프로젝트 (GitHub)</b>\n${ghFiltered.map(t => `• ${shortenTitle(t)}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n');
 
   const kwLine = keywords.split(',').map(k => `#${k.trim().replace(/\s/g,'')}`).join(' ');
 
-  return `🤖 <b>오늘의 AI 트렌드</b> — ${dateStr}(${dayStr})\n\n${sections}\n\n📌 <b>오늘의 키워드</b>\n${kwLine}\n\n<i>매일 아침 자동 업데이트 · NOVA AI</i>`;
+  return `🤖 <b>오늘의 AI 트렌드</b> — ${dateStr}(${dayStr})\n\n${sections || '오늘은 수집된 AI 트렌드가 없습니다.'}\n\n📌 <b>오늘 주목할 키워드</b>\n${kwLine}\n\n💡 이 트렌드로 만든 SNS 콘텐츠가 오늘 자동 발행됩니다\n<i>@nova_ai_kr · 매일 아침 자동 업데이트</i>`;
 }
 
 // ─── 14a: YouTube TOP10 ───────────────────────────────────
