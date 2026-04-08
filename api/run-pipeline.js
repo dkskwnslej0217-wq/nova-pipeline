@@ -150,7 +150,7 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
 
   const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -255,7 +255,7 @@ async function generateHooks(keywords) {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       messages: [
         { role: 'system', content: '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 없음. AI 티 절대 금지. 진짜 사람 말투. 한국어만.' },
         { role: 'user', content: `키워드: ${keywords}\n\n첫 줄 훅 3개. 각 25자 이내. 번호 없이. 스크롤 멈추게 되는 문장으로. 오타 없이.` }
@@ -281,7 +281,7 @@ async function finalizeContent(keywords, hooks) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 500,
           temperature: 0.8,
