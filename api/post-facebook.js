@@ -23,7 +23,9 @@ function getPollinationsUrl(prompt) {
   return `https://image.pollinations.ai/prompt/${encoded}?width=1200&height=630&nologo=true&model=sana`;
 }
 
-async function postToFacebook(text, imagePrompt) {
+async function postToFacebook(text, imagePrompt, tokenOverride = null, pageOverride = null) {
+  const token = tokenOverride || FB_TOKEN;
+  const pageId = pageOverride || FB_PAGE_ID;
   let imageUrl;
   try {
     imageUrl = await getPexelsPhoto(imagePrompt);
@@ -31,14 +33,14 @@ async function postToFacebook(text, imagePrompt) {
     imageUrl = getPollinationsUrl(imagePrompt);
   }
   const res = await fetch(
-    `https://graph.facebook.com/v25.0/${FB_PAGE_ID}/photos`,
+    `https://graph.facebook.com/v25.0/${pageId}/photos`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url: imageUrl,
         caption: text.slice(0, 63206),
-        access_token: FB_TOKEN,
+        access_token: token,
       }),
     }
   );
@@ -61,13 +63,18 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
-  const { text, imagePrompt } = body;
+  const { text, imagePrompt, fb_token, fb_page_id } = body;
   if (!text) {
     return new Response(JSON.stringify({ error: 'text 필요' }), { status: 400 });
   }
 
   try {
-    const post_id = await postToFacebook(text, imagePrompt || text.slice(0, 60) + ', Korean SNS style, vibrant, minimal');
+    const post_id = await postToFacebook(
+      text,
+      imagePrompt || text.slice(0, 60) + ', Korean SNS style, vibrant, minimal',
+      fb_token || null,
+      fb_page_id || null
+    );
     return new Response(JSON.stringify({ ok: true, post_id }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

@@ -24,7 +24,9 @@ function getPollinationsUrl(prompt) {
   return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=sana`;
 }
 
-async function postToInstagram(text, imagePrompt, retry = 0) {
+async function postToInstagram(text, imagePrompt, retry = 0, tokenOverride = null, accountOverride = null) {
+  const token = tokenOverride || IG_TOKEN;
+  const accountId = accountOverride || IG_ACCOUNT_ID;
   let imageUrl;
   try {
     imageUrl = await getPexelsPhoto(imagePrompt);
@@ -35,14 +37,14 @@ async function postToInstagram(text, imagePrompt, retry = 0) {
 
   // 1단계: 미디어 컨테이너 생성 (이미지 필수)
   const createRes = await fetch(
-    `https://graph.instagram.com/v21.0/${IG_ACCOUNT_ID}/media`,
+    `https://graph.instagram.com/v21.0/${accountId}/media`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         image_url: imageUrl,
         caption,
-        access_token: IG_TOKEN,
+        access_token: token,
       }),
     }
   );
@@ -51,7 +53,7 @@ async function postToInstagram(text, imagePrompt, retry = 0) {
     // 일시적 오류면 1회 재시도
     if (retry === 0 && errText.includes('"is_transient":true')) {
       await new Promise(r => setTimeout(r, 5000));
-      return postToInstagram(text, imagePrompt, 1);
+      return postToInstagram(text, imagePrompt, 1, token, accountId);
     }
     throw new Error(`Instagram 컨테이너 생성 실패: ${createRes.status} ${errText}`);
   }
@@ -62,13 +64,13 @@ async function postToInstagram(text, imagePrompt, retry = 0) {
 
   // 2단계: 게시
   const publishRes = await fetch(
-    `https://graph.instagram.com/v21.0/${IG_ACCOUNT_ID}/media_publish`,
+    `https://graph.instagram.com/v21.0/${accountId}/media_publish`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         creation_id,
-        access_token: IG_TOKEN,
+        access_token: token,
       }),
     }
   );
@@ -91,13 +93,19 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
-  const { text, imagePrompt } = body;
+  const { text, imagePrompt, ig_token, ig_account_id } = body;
   if (!text) {
     return new Response(JSON.stringify({ error: 'text 필요' }), { status: 400 });
   }
 
   try {
-    const post_id = await postToInstagram(text, imagePrompt || text.slice(0, 60) + ', Korean aesthetic, modern minimalist, 4k, no text');
+    const post_id = await postToInstagram(
+      text,
+      imagePrompt || text.slice(0, 60) + ', Korean aesthetic, modern minimalist, 4k, no text',
+      0,
+      ig_token || null,
+      ig_account_id || null
+    );
     return new Response(JSON.stringify({ ok: true, post_id }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
