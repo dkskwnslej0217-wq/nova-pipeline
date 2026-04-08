@@ -24,15 +24,32 @@ function getPollinationsUrl(prompt) {
   return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=flux`;
 }
 
+// Lorem Picsum — 최종 폴백 (항상 작동, 무료, API 키 불필요)
+// seed를 키워드로 고정해서 같은 키워드면 같은 이미지
+function getPicsumUrl(prompt) {
+  const seed = encodeURIComponent(prompt.slice(0, 30).replace(/\s/g, '-'));
+  return `https://picsum.photos/seed/${seed}/1080/1080`;
+}
+
+async function resolveImageUrl(imagePrompt) {
+  // 1순위: Pexels (API 키 필요, 가장 안정적)
+  if (PEXELS_KEY) {
+    try { return await getPexelsPhoto(imagePrompt); } catch { /* 폴백 */ }
+  }
+  // 2순위: Pollinations (AI 생성, 무료)
+  try {
+    const url = getPollinationsUrl(imagePrompt);
+    const check = await fetch(url, { method: 'HEAD' });
+    if (check.ok) return url;
+  } catch { /* 폴백 */ }
+  // 3순위: Picsum (항상 작동, 안전한 최종 폴백)
+  return getPicsumUrl(imagePrompt);
+}
+
 async function postToInstagram(text, imagePrompt, retry = 0, tokenOverride = null, accountOverride = null) {
   const token = tokenOverride || IG_TOKEN;
   const accountId = accountOverride || IG_ACCOUNT_ID;
-  let imageUrl;
-  try {
-    imageUrl = await getPexelsPhoto(imagePrompt);
-  } catch {
-    imageUrl = getPollinationsUrl(imagePrompt);
-  }
+  const imageUrl = await resolveImageUrl(imagePrompt);
   const caption = text.slice(0, 2200);
 
   // 1단계: 미디어 컨테이너 생성 (이미지 필수)
