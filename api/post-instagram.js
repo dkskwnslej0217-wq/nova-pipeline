@@ -15,11 +15,22 @@ async function getPexelsPhoto(query) {
   const data = await res.json();
   if (!data.photos?.length) throw new Error('Pexels 사진 없음');
   const photo = data.photos[Math.floor(Math.random() * Math.min(5, data.photos.length))];
-  return photo.src.large2x; // 고화질 실사 URL
+  return photo.src.large2x;
+}
+
+// Pollinations.ai — Pexels 실패 시 폴백 (무료, API 키 불필요)
+function getPollinationsUrl(prompt) {
+  const encoded = encodeURIComponent(prompt.slice(0, 200));
+  return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=sana`;
 }
 
 async function postToInstagram(text, imagePrompt, retry = 0) {
-  const imageUrl = await getPexelsPhoto(imagePrompt);
+  let imageUrl;
+  try {
+    imageUrl = await getPexelsPhoto(imagePrompt);
+  } catch {
+    imageUrl = getPollinationsUrl(imagePrompt);
+  }
   const caption = text.slice(0, 2200);
 
   // 1단계: 미디어 컨테이너 생성 (이미지 필수)

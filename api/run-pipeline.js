@@ -88,6 +88,20 @@ async function saveTrends(hnTrends, ghTrends, redditTrends) {
   });
 }
 
+// ─── 구글 트렌드 KR (API 키 불필요) ──────────────────────
+async function fetchGoogleTrendsKR() {
+  const res = await fetch('https://trends.google.com/trending/rss?geo=KR', {
+    headers: { 'User-Agent': 'nova-pipeline/1.0' },
+  });
+  if (!res.ok) throw new Error(`Google Trends ${res.status}`);
+  const text = await res.text();
+  const matches = [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g)];
+  return matches
+    .map(m => (m[1] || m[2] || '').trim())
+    .filter(t => t && t !== 'Daily Search Trends')
+    .slice(0, 5);
+}
+
 // ─── 14a-2: Reddit AI 트렌드 ─────────────────────────────
 async function fetchRedditTrends() {
   const subs = ['artificial', 'ChatGPT', 'SideProject'];
@@ -140,13 +154,14 @@ async function fetchGitHubTrends() {
 }
 
 // ─── 14b: Gemini 키워드 추출 ─────────────────────────────
-async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = []) {
+async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = []) {
   const ytSection = titles?.length ? `[한국 유튜브 인기]\n${titles.join('\n')}` : '';
   const hnSection = hnTrends.length ? `[HackerNews AI 트렌드]\n${hnTrends.join('\n')}` : '';
   const ghSection = ghTrends.length ? `[GitHub AI 인기 레포]\n${ghTrends.join('\n')}` : '';
   const rdSection = redditTrends.length ? `[Reddit AI 커뮤니티 반응]\n${redditTrends.join('\n')}` : '';
   const igSection = igTop.length ? `[내 인스타 반응 좋은 글 패턴]\n${igTop.join('\n')}` : '';
-  const context = [ytSection, hnSection, ghSection, rdSection, igSection].filter(Boolean).join('\n\n');
+  const gtSection = googleTrends.length ? `[한국 구글 실시간 트렌드]\n${googleTrends.join('\n')}` : '';
+  const context = [ytSection, hnSection, ghSection, rdSection, igSection, gtSection].filter(Boolean).join('\n\n');
 
   const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
@@ -393,18 +408,20 @@ export default async function handler(req, res) {
 
   try {
     // 14a 트렌드 수집 (YouTube + HackerNews + GitHub 병렬)
-    const [titles, hnTrends, ghTrends, redditTrends, igTop] = await Promise.all([
+    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends] = await Promise.all([
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
       fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
       fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패 → 폴백\n${e.message}`); return []; }),
       fetchInstagramTop().catch(e => { tg(`⚠️ 인스타 분석 실패 (권한 확인 필요)\n${e.message}`); return []; }),
+      fetchGoogleTrendsKR().catch(() => []),
     ]);
     const trendSummary = [
       hnTrends.length     ? `🔥 HN:\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
       redditTrends.length ? `💬 Reddit:\n${redditTrends.slice(0,2).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
       ghTrends.length     ? `⭐ GitHub:\n${ghTrends.slice(0,2).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
       igTop.length        ? `📊 내 인스타 반응 상위:\n${igTop.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
+      googleTrends.length ? `🇰🇷 구글 트렌드:\n${googleTrends.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
     await tg(`📡 트렌드 수집 완료\n\n${trendSummary}`);
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
@@ -412,7 +429,7 @@ export default async function handler(req, res) {
     // 14b Gemini
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends, redditTrends, igTop);
+      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends, redditTrends, igTop, googleTrends);
     } catch(e) {
       await tg(`⚠️ Gemini 실패 → 기본 키워드 사용\n${e.message}`);
       keywords = 'AI자동화, 콘텐츠수익, 1인창업, SNS마케팅';

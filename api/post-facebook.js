@@ -18,8 +18,18 @@ async function getPexelsPhoto(query) {
   return photo.src.large2x;
 }
 
+function getPollinationsUrl(prompt) {
+  const encoded = encodeURIComponent(prompt.slice(0, 200));
+  return `https://image.pollinations.ai/prompt/${encoded}?width=1200&height=630&nologo=true&model=sana`;
+}
+
 async function postToFacebook(text, imagePrompt) {
-  const imageUrl = await getPexelsPhoto(imagePrompt);
+  let imageUrl;
+  try {
+    imageUrl = await getPexelsPhoto(imagePrompt);
+  } catch {
+    imageUrl = getPollinationsUrl(imagePrompt);
+  }
   const res = await fetch(
     `https://graph.facebook.com/v25.0/${FB_PAGE_ID}/photos`,
     {
