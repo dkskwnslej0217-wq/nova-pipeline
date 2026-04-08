@@ -162,6 +162,27 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
   return data.candidates[0].content.parts[0].text.trim();
 }
 
+// ─── 키워드 → 영어 이미지 프롬프트 ──────────────────────────
+const KR_EN_IMG = {
+  'AI자동화':   'artificial intelligence automation technology futuristic',
+  '콘텐츠수익': 'content creator earning money laptop studio',
+  '1인창업':   'solo entrepreneur startup office minimal',
+  'SNS마케팅':  'social media marketing digital phone screen',
+  '재테크':    'investment finance wealth modern city',
+  '부업':      'side hustle income freelance work',
+  '직장인':    'professional office worker Korean modern',
+  '시간절약':  'time saving efficiency productivity',
+  '월급외수익': 'passive income side income money growth',
+  '트렌드':    'trending modern technology lifestyle',
+  '미래':      'futuristic technology abstract',
+};
+
+function buildImagePromptFromKeywords(keywords) {
+  const tags = keywords.split(',').map(k => k.trim());
+  const en = tags.map(t => KR_EN_IMG[t] || t).filter(Boolean);
+  return en.slice(0, 2).join(', ') + ', Korean aesthetic, modern minimalist, high quality, 4k, no text, no watermark';
+}
+
 // ─── 콘텐츠 타입 랜덤 선택 ────────────────────────────────
 function getContentType() {
   const types = [
@@ -190,13 +211,23 @@ AI 티 나는 표현 금지. 진짜 직장인이 쓴 것처럼.
   return {
     instagram: `${base}
 
-Instagram 캡션 작성:
-- 첫 줄: 직장인이 공감하거나 멈출 훅 (20자 이내, 숫자 활용)
-- 본문: 2~3줄, AI 부업/자동화 실용 팁 중심
-- 마지막: 저장하게 만드는 한 줄 ("이거 모르면 손해" 류)
-- 이모지 2~3개
-- 총 120자 이내
-- 해시태그 없이`,
+Instagram 캡션 작성 (저장율·공유율 극대화):
+
+형식 예시:
+⚡ [스크롤 멈추는 훅 — 숫자나 반전 포함, 20자 이내]
+
+→ [핵심 팁 한 줄]
+→ [핵심 팁 한 줄]
+→ [핵심 팁 한 줄]
+
+💾 [저장각 한 줄 — "이거 모르면 손해" 류]
+
+규칙:
+- 이모지 줄마다 1개씩 (총 4~6개)
+- 줄바꿈 꼭 넣기 (빽빽하면 안 읽음)
+- 해시태그 없이
+- 총 150자 이내
+- "→" 앞에 줄바꿈 필수`,
 
     facebook: `${base}
 
@@ -369,7 +400,13 @@ export default async function handler(req, res) {
       fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패 → 폴백\n${e.message}`); return []; }),
       fetchInstagramTop().catch(e => { tg(`⚠️ 인스타 분석 실패 (권한 확인 필요)\n${e.message}`); return []; }),
     ]);
-    await tg(`📡 HN ${hnTrends.length}개 · GitHub ${ghTrends.length}개 · Reddit ${redditTrends.length}개 · 인스타 ${igTop.length}개 수집 완료`);
+    const trendSummary = [
+      hnTrends.length     ? `🔥 HN:\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
+      redditTrends.length ? `💬 Reddit:\n${redditTrends.slice(0,2).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
+      ghTrends.length     ? `⭐ GitHub:\n${ghTrends.slice(0,2).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
+      igTop.length        ? `📊 내 인스타 반응 상위:\n${igTop.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
+    ].filter(Boolean).join('\n\n');
+    await tg(`📡 트렌드 수집 완료\n\n${trendSummary}`);
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
 
     // 14b Gemini
@@ -462,11 +499,12 @@ export default async function handler(req, res) {
     // }
 
     // Instagram 발행
+    const imagePrompt = buildImagePromptFromKeywords(keywords);
     try {
       const igRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-instagram', {
         method: 'POST',
         headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: igContent }),
+        body: JSON.stringify({ text: igContent, imagePrompt }),
       });
       const igData = await igRes.json();
       if (igData.ok) {
@@ -483,7 +521,7 @@ export default async function handler(req, res) {
       const fbRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-facebook', {
         method: 'POST',
         headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: fbContent }),
+        body: JSON.stringify({ text: fbContent, imagePrompt }),
       });
       const fbData = await fbRes.json();
       if (fbData.ok) {

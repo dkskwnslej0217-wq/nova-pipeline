@@ -4,14 +4,22 @@ export const config = { runtime: 'edge' };
 const FB_TOKEN   = process.env.FACEBOOK_ACCESS_TOKEN;
 const FB_PAGE_ID = process.env.FACEBOOK_PAGE_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
+const PEXELS_KEY = process.env.PEXELS_API_KEY;
 
-function buildImageUrl(text) {
-  const prompt = encodeURIComponent(text.slice(0, 60) + ', Korean SNS style, vibrant, minimal');
-  return `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=630&nologo=true`;
+async function getPexelsPhoto(query) {
+  const res = await fetch(
+    `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
+    { headers: { Authorization: PEXELS_KEY } }
+  );
+  if (!res.ok) throw new Error(`Pexels ${res.status}`);
+  const data = await res.json();
+  if (!data.photos?.length) throw new Error('Pexels 사진 없음');
+  const photo = data.photos[Math.floor(Math.random() * Math.min(5, data.photos.length))];
+  return photo.src.large2x;
 }
 
-async function postToFacebook(text) {
-  const imageUrl = buildImageUrl(text);
+async function postToFacebook(text, imagePrompt) {
+  const imageUrl = await getPexelsPhoto(imagePrompt);
   const res = await fetch(
     `https://graph.facebook.com/v25.0/${FB_PAGE_ID}/photos`,
     {
@@ -43,13 +51,13 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
-  const { text } = body;
+  const { text, imagePrompt } = body;
   if (!text) {
-    return new Response(JSON.stringify({ error: 'text 필드 필요' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'text 필요' }), { status: 400 });
   }
 
   try {
-    const post_id = await postToFacebook(text);
+    const post_id = await postToFacebook(text, imagePrompt || text.slice(0, 60) + ', Korean SNS style, vibrant, minimal');
     return new Response(JSON.stringify({ ok: true, post_id }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

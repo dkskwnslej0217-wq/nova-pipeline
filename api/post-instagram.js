@@ -4,17 +4,22 @@ export const config = { runtime: 'edge' };
 const IG_TOKEN      = process.env.INSTAGRAM_ACCESS_TOKEN;
 const IG_ACCOUNT_ID = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
+const PEXELS_KEY    = process.env.PEXELS_API_KEY;
 
-function buildImageUrl(text) {
-  const prompt = encodeURIComponent(
-    text.slice(0, 60) +
-    ', Korean aesthetic, modern minimalist, high quality, cinematic lighting, 4k, no text, no watermark'
+async function getPexelsPhoto(query) {
+  const res = await fetch(
+    `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=square`,
+    { headers: { Authorization: PEXELS_KEY } }
   );
-  return `https://image.pollinations.ai/prompt/${prompt}?width=1080&height=1080&nologo=true&model=flux&enhance=true`;
+  if (!res.ok) throw new Error(`Pexels ${res.status}`);
+  const data = await res.json();
+  if (!data.photos?.length) throw new Error('Pexels 사진 없음');
+  const photo = data.photos[Math.floor(Math.random() * Math.min(5, data.photos.length))];
+  return photo.src.large2x; // 고화질 실사 URL
 }
 
-async function postToInstagram(text, retry = 0) {
-  const imageUrl = buildImageUrl(text);
+async function postToInstagram(text, imagePrompt, retry = 0) {
+  const imageUrl = await getPexelsPhoto(imagePrompt);
   const caption = text.slice(0, 2200);
 
   // 1단계: 미디어 컨테이너 생성 (이미지 필수)
@@ -35,7 +40,7 @@ async function postToInstagram(text, retry = 0) {
     // 일시적 오류면 1회 재시도
     if (retry === 0 && errText.includes('"is_transient":true')) {
       await new Promise(r => setTimeout(r, 5000));
-      return postToInstagram(text, 1);
+      return postToInstagram(text, imagePrompt, 1);
     }
     throw new Error(`Instagram 컨테이너 생성 실패: ${createRes.status} ${errText}`);
   }
@@ -75,13 +80,13 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
-  const { text } = body;
+  const { text, imagePrompt } = body;
   if (!text) {
-    return new Response(JSON.stringify({ error: 'text 필드 필요' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'text 필요' }), { status: 400 });
   }
 
   try {
-    const post_id = await postToInstagram(text);
+    const post_id = await postToInstagram(text, imagePrompt || text.slice(0, 60) + ', Korean aesthetic, modern minimalist, 4k, no text');
     return new Response(JSON.stringify({ ok: true, post_id }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
