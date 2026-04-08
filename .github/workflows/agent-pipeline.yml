@@ -1,0 +1,45 @@
+name: Agent Pipeline
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 매일 08:00 KST (전날 23:00 UTC)
+  workflow_dispatch:         # 수동 실행
+
+jobs:
+  run-agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright MCP + Chromium
+        run: |
+          npx playwright install chromium --with-deps
+          npm install -g @playwright/mcp@latest
+
+      - name: Run client agents (parallel)
+        env:
+          ANTHROPIC_API_KEY:      ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL:           ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:   ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PIPELINE_SECRET:        ${{ secrets.PIPELINE_SECRET }}
+          TELEGRAM_BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node agent/run-agents.js
+
+      - name: Run Kmong agent
+        env:
+          ANTHROPIC_API_KEY:      ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
+          KMONG_EMAIL:            ${{ secrets.KMONG_EMAIL }}
+          KMONG_PASSWORD:         ${{ secrets.KMONG_PASSWORD }}
+        run: node agent/kmong-agent.js

@@ -20,6 +20,26 @@
             "command": "bash -c 'echo \"$CLAUDE_TOOL_INPUT\" | grep -qi \"\\.env\" && echo \"BLOCKED: .env 읽기 금지\" >&2 && exit 2 || exit 0'"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=$(echo \"$CLAUDE_TOOL_INPUT\" | grep -o \"command.*\" | head -1); if echo \"$CMD\" | grep -qE \"(rm -rf|DROP TABLE|force.?push.*main)\"; then echo \"위험한 명령 차단\" >&2; exit 2; fi; exit 0'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'FILE=$(echo \"$CLAUDE_TOOL_INPUT\" | grep -o \"file_path[^,}]*\" | grep -o \"/[^\\\"]*\"); if [[ \"$FILE\" == *.js ]] && [ -f \"$FILE\" ]; then node --check \"$FILE\" 2>&1 && echo \"✅ 문법 OK\" || echo \"❌ 문법 오류 확인 필요\"; fi; exit 0'"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -32,6 +52,22 @@
           }
         ]
       }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(npm install*)",
+      "Bash(npm run*)",
+      "Bash(node --check*)",
+      "Bash(ls*)",
+      "Bash(grep*)",
+      "Bash(node -e*)"
     ]
   }
 }
