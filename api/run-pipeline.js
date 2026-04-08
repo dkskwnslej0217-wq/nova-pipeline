@@ -155,12 +155,13 @@ async function fetchGitHubTrends() {
 
 // ─── 14b: Gemini 키워드 추출 ─────────────────────────────
 async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = []) {
-  const ytSection = titles?.length ? `[한국 유튜브 인기]\n${titles.join('\n')}` : '';
-  const hnSection = hnTrends.length ? `[HackerNews AI 트렌드]\n${hnTrends.join('\n')}` : '';
-  const ghSection = ghTrends.length ? `[GitHub AI 인기 레포]\n${ghTrends.join('\n')}` : '';
-  const rdSection = redditTrends.length ? `[Reddit AI 커뮤니티 반응]\n${redditTrends.join('\n')}` : '';
-  const igSection = igTop.length ? `[내 인스타 반응 좋은 글 패턴]\n${igTop.join('\n')}` : '';
-  const gtSection = googleTrends.length ? `[한국 구글 실시간 트렌드]\n${googleTrends.join('\n')}` : '';
+  const trim = (arr, n = 3) => arr.slice(0, n).map(s => String(s).slice(0, 60));
+  const ytSection = titles?.length ? `[유튜브]\n${trim(titles).join('\n')}` : '';
+  const hnSection = hnTrends.length ? `[HN]\n${trim(hnTrends).join('\n')}` : '';
+  const ghSection = ghTrends.length ? `[GitHub]\n${trim(ghTrends).join('\n')}` : '';
+  const rdSection = redditTrends.length ? `[Reddit]\n${trim(redditTrends).join('\n')}` : '';
+  const igSection = igTop.length ? `[내 인스타]\n${trim(igTop).join('\n')}` : '';
+  const gtSection = googleTrends.length ? `[구글KR]\n${trim(googleTrends).join('\n')}` : '';
   const context = [ytSection, hnSection, ghSection, rdSection, igSection, gtSection].filter(Boolean).join('\n\n');
 
   const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
@@ -275,7 +276,7 @@ async function generateHooks(keywords) {
         { role: 'system', content: '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 없음. AI 티 절대 금지. 진짜 사람 말투. 한국어만.' },
         { role: 'user', content: `키워드: ${keywords}\n\n첫 줄 훅 3개. 각 25자 이내. 번호 없이. 스크롤 멈추게 되는 문장으로. 오타 없이.` }
       ],
-      max_tokens: 300,
+      max_tokens: 100,
     }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}`);
@@ -283,49 +284,47 @@ async function generateHooks(keywords) {
   return data.choices[0].message.content;
 }
 
-// ─── 14d: 최종 완성 (Groq 우선 → 실패 시 Claude 폴백) ──────
+// ─── 14d: 최종 완성 (1번 Groq 호출 → 3개 플랫폼 동시 생성) ──
 async function finalizeContent(keywords, hooks) {
   const type = getContentType();
-  const prompts = getPlatformPrompts(keywords, hooks, type);
 
-  // Instagram/Facebook/YouTube 각각 생성
-  async function generate(prompt) {
-    // 1차: Groq
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 500,
-          temperature: 0.8,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.choices[0].message.content;
-      }
-    } catch { /* 폴백 */ }
+  const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 절대 금지. 진짜 직장인 말투.';
+  const userMsg = `키워드: ${keywords}\n훅: ${hooks}\n타입: ${type.name} — ${type.hook}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 3개 작성:\n\n===IG===\n⚡ [훅 20자 이내]\n\n→ [팁]\n→ [팁]\n→ [팁]\n\n💾 [저장각 한 줄]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(공감 훅 + 스토리 3~4줄 + 댓글유도 질문, 이모지 1~2개, 180자 이내)\n\n===YT===\n(나레이션: 도입+팁 3~4문장+여운, 말하듯, 150자 이내)`;
 
-    // 2차: Claude
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+  async function callGroq() {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
+      headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }],
+        max_tokens: 600,
+        temperature: 0.8,
+      }),
     });
-    if (!res.ok) throw new Error(`Claude ${res.status}`);
-    const data = await res.json();
-    return data.content[0].text;
+    if (!r.ok) throw new Error(`Groq ${r.status}`);
+    return (await r.json()).choices[0].message.content;
   }
 
-  const [igText, fbText, ytText] = await Promise.all([
-    generate(prompts.instagram),
-    generate(prompts.facebook),
-    generate(prompts.youtube),
-  ]);
+  async function callClaude() {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
+    });
+    if (!r.ok) throw new Error(`Claude ${r.status}`);
+    return (await r.json()).content[0].text;
+  }
 
-  return { igText, fbText, ytText };
+  let raw;
+  try { raw = await callGroq(); } catch { raw = await callClaude(); }
+
+  const extract = (tag) => {
+    const m = raw.match(new RegExp(`===${tag}===\\n([\\s\\S]*?)(?====|$)`));
+    return m ? m[1].trim() : raw;
+  };
+
+  return { igText: extract('IG'), fbText: extract('FB'), ytText: extract('YT') };
 }
 
 
@@ -368,7 +367,6 @@ export default async function handler(req, res) {
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      await tg(`✅ 일/월 사용량 초기화 완료 (${today.toISOString().slice(0, 7)})`);
     } else {
       // 매일: daily_count가 0보다 큰 유저만 리셋 (전체 업데이트 방지)
       await fetch(`${SUPA_URL}/rest/v1/users?daily_count=gt.0`, {
@@ -376,7 +374,6 @@ export default async function handler(req, res) {
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ daily_count: 0 }),
       });
-      await tg(`✅ 일 사용량 초기화 완료 (${today.toISOString().slice(0, 10)})`);
     }
   } catch(e) {
     await tg(`⚠️ 사용량 초기화 실패\n${e.message}`);
@@ -403,8 +400,8 @@ export default async function handler(req, res) {
     }
   }
 
-  const startedAt = new Date().toISOString();
-  await tg(`🚀 NOVA 파이프라인 시작 (${startedAt.slice(0, 16)})`);
+  const startMs = Date.now();
+  let igStatus = '❌', fbStatus = '❌', videoStatus = '❌';
 
   try {
     // 14a 트렌드 수집 (YouTube + HackerNews + GitHub 병렬)
@@ -423,7 +420,6 @@ export default async function handler(req, res) {
       igTop.length        ? `📊 내 인스타 반응 상위:\n${igTop.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
       googleTrends.length ? `🇰🇷 구글 트렌드:\n${googleTrends.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
-    await tg(`📡 트렌드 수집 완료\n\n${trendSummary}`);
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
 
     // 14b Gemini
@@ -490,12 +486,12 @@ export default async function handler(req, res) {
         }
       );
       if (dispatchRes.ok) {
-        await tg(`🎬 영상 파이프라인 트리거 완료`);
+        videoStatus = '✅';
       } else {
-        await tg(`⚠️ 영상 트리거 실패: ${dispatchRes.status}`);
+        tg(`⚠️ 영상 트리거 실패: ${dispatchRes.status}`);
       }
     } catch(e) {
-      await tg(`⚠️ 영상 트리거 오류: ${e.message}`);
+      tg(`⚠️ 영상 트리거 오류: ${e.message}`);
     }
 
     // Threads 발행 — 차단 중 비활성화
@@ -525,12 +521,12 @@ export default async function handler(req, res) {
       });
       const igData = await igRes.json();
       if (igData.ok) {
-        await tg(`📸 Instagram 발행 완료 (post_id: ${igData.post_id})`);
+        igStatus = '✅';
       } else {
-        await tg(`⚠️ Instagram 발행 실패: ${igData.error}`);
+        tg(`⚠️ Instagram 발행 실패: ${igData.error}`);
       }
     } catch(e) {
-      await tg(`⚠️ Instagram 발행 오류: ${e.message}`);
+      tg(`⚠️ Instagram 발행 오류: ${e.message}`);
     }
 
     // Facebook 발행
@@ -542,16 +538,25 @@ export default async function handler(req, res) {
       });
       const fbData = await fbRes.json();
       if (fbData.ok) {
-        await tg(`📘 Facebook 발행 완료 (post_id: ${fbData.post_id})`);
+        fbStatus = '✅';
       } else {
-        await tg(`⚠️ Facebook 발행 실패: ${fbData.error}`);
+        tg(`⚠️ Facebook 발행 실패: ${fbData.error}`);
       }
     } catch(e) {
-      await tg(`⚠️ Facebook 발행 오류: ${e.message}`);
+      tg(`⚠️ Facebook 발행 오류: ${e.message}`);
     }
 
-    // 성공 알림
-    await tg(`✅ NOVA 파이프라인 완료\n\n📌 키워드: ${keywords}\n\n${igFinal.slice(0, 300)}...`);
+    // 완료 요약 (1개)
+    const kst = new Date(Date.now() + 9 * 3600000).toISOString().slice(11, 16);
+    const elapsed = Math.round((Date.now() - startMs) / 1000);
+    const gtPreview = googleTrends.slice(0, 2).join(', ');
+    await tg(
+      `✅ NOVA 완료 (${kst} KST)\n` +
+      `📌 ${keywords}\n` +
+      (gtPreview ? `🇰🇷 ${gtPreview}\n` : '') +
+      `📸 IG ${igStatus} | 📘 FB ${fbStatus} | 🎬 ${videoStatus}\n` +
+      `⏱️ ${elapsed}초`
+    );
 
     return res.status(200).json({ ok: true, topic, keywords });
 
