@@ -82,7 +82,8 @@ export default async function handler(req, res) {
   try {
     const fb = await refreshFacebookToken();
     results.facebook = { ok: true, expiresIn: fb.expiresIn };
-    await tg(`✅ Facebook 토큰 갱신 완료\n만료까지 ${Math.floor(fb.expiresIn / 86400)}일 남음`);
+    const fbDays = fb.expiresIn ? Math.floor(fb.expiresIn / 86400) : null;
+    await tg(`✅ Facebook 토큰 갱신 완료\n${fbDays ? `만료까지 ${fbDays}일 남음` : '페이지 토큰 (만료 없음)'}`);
   } catch(e) {
     results.facebook = { ok: false, error: e.message };
     await tg(`❌ Facebook 토큰 갱신 실패\n${e.message}\n※ FB_APP_ID, FB_APP_SECRET 환경변수 확인 필요`);
