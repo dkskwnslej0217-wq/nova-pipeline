@@ -305,7 +305,7 @@ async function finalizeContent(keywords, hooks) {
   const type = getContentType();
 
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 절대 금지. 진짜 직장인 말투.';
-  const userMsg = `키워드: ${keywords}\n훅: ${hooks}\n타입: ${type.name} — ${type.hook}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 3개 작성:\n\n===IG===\n⚡ [훅 20자 이내]\n\n→ [팁]\n→ [팁]\n→ [팁]\n\n💾 [저장각 한 줄]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(공감 훅 + 스토리 3~4줄 + 댓글유도 질문, 이모지 1~2개, 180자 이내)\n\n===YT===\n(나레이션: 도입+팁 3~4문장+여운, 말하듯, 150자 이내)`;
+  const userMsg = `키워드: ${keywords}\n훅: ${hooks}\n타입: ${type.name} — ${type.hook}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 4개 작성:\n\n===IG===\n⚡ [훅 20자 이내]\n\n→ [팁]\n→ [팁]\n→ [팁]\n\n💾 [저장각 한 줄]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(공감 훅 + 스토리 3~4줄 + 댓글유도 질문, 이모지 1~2개, 180자 이내)\n\n===YT===\n(나레이션: 도입+팁 3~4문장+여운, 말하듯, 150자 이내)\n\n===IMG===\n(English only, 12 words max: describe a realistic photo scene that visually matches this post. Real person, modern Korean office or cafe, natural lighting, no text, no robot, no abstract art. Example: "young Korean professional working on laptop in bright modern cafe")`;
 
   async function callGroq() {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -340,7 +340,8 @@ async function finalizeContent(keywords, hooks) {
     return m ? m[1].trim() : raw;
   };
 
-  return { igText: extract('IG'), fbText: extract('FB'), ytText: extract('YT') };
+  const imagePrompt = extract('IMG').replace(/['"]/g, '').trim();
+  return { igText: extract('IG'), fbText: extract('FB'), ytText: extract('YT'), imagePrompt };
 }
 
 
@@ -454,7 +455,7 @@ export default async function handler(req, res) {
     const hooks = filterKoreanOnly(hooksRaw);
 
     // 14d 콘텐츠 생성 (플랫폼별)
-    const { igText, fbText, ytText } = await finalizeContent(keywords, hooks);
+    const { igText, fbText, ytText, imagePrompt: groqImagePrompt } = await finalizeContent(keywords, hooks);
     const igFinal = filterKoreanOnly(igText);
     const fbFinal = filterKoreanOnly(fbText);
     const ytFinal = filterKoreanOnly(ytText);
@@ -529,8 +530,10 @@ export default async function handler(req, res) {
     //   await tg(`⚠️ Threads 발행 오류: ${e.message}`);
     // }
 
-    // Instagram 발행
-    const imagePrompt = buildImagePromptFromKeywords(keywords);
+    // Instagram 발행 — 글 내용 기반 이미지 프롬프트 (Groq 생성 우선, 폴백은 키워드 기반)
+    const imagePrompt = (groqImagePrompt && groqImagePrompt.length > 10)
+      ? groqImagePrompt + ', photorealistic, high quality, 4k, no text, no watermark'
+      : buildImagePromptFromKeywords(keywords);
     try {
       const igRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-instagram', {
         method: 'POST',

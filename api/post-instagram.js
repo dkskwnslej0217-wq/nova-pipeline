@@ -1,5 +1,5 @@
 // api/post-instagram.js — Instagram 자동 발행 (Pollinations.ai 이미지 포함)
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const IG_TOKEN      = process.env.INSTAGRAM_ACCESS_TOKEN;
 const IG_ACCOUNT_ID = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
@@ -21,7 +21,7 @@ async function getPexelsPhoto(query) {
 // Pollinations.ai — Pexels 실패 시 폴백 (무료, API 키 불필요)
 function getPollinationsUrl(prompt) {
   const encoded = encodeURIComponent(prompt.slice(0, 200));
-  return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=sana`;
+  return `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&nologo=true&model=flux`;
 }
 
 async function postToInstagram(text, imagePrompt, retry = 0, tokenOverride = null, accountOverride = null) {
