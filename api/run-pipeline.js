@@ -397,10 +397,14 @@ async function finalizeContent(keywords, hooks) {
 
   const extract = (tag) => {
     const m = raw.match(new RegExp(`===${tag}===\\n([\\s\\S]*?)(?====|$)`));
-    return m ? m[1].trim() : raw;
+    return m ? m[1].trim() : '';  // 태그 없으면 빈 문자열 (전체 raw 반환 금지)
   };
 
-  const imagePrompt = extract('IMG').replace(/['"]/g, '').trim();
+  const imgRaw = extract('IMG').replace(/['"]/g, '').trim();
+  // 영어 단어 포함 + 50자 이내인 경우만 유효한 이미지 프롬프트로 인정
+  const imagePrompt = (imgRaw.length > 5 && imgRaw.length < 200 && /[a-zA-Z]/.test(imgRaw))
+    ? imgRaw
+    : '';
   return { igText: extract('IG'), fbText: extract('FB'), ytText: extract('YT'), imagePrompt };
 }
 

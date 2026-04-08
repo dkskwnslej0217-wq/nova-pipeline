@@ -57,7 +57,15 @@ async function postToInstagram(text, imagePrompt, retry = 0, tokenOverride = nul
     }
     throw new Error(`Instagram 컨테이너 생성 실패: ${createRes.status} ${errText}`);
   }
-  const { id: creation_id } = await createRes.json();
+  let createData;
+  try {
+    createData = await createRes.json();
+  } catch {
+    const rawText = await createRes.text().catch(() => 'unknown');
+    throw new Error(`Instagram 컨테이너 응답 파싱 실패: ${rawText.slice(0, 100)}`);
+  }
+  if (!createData.id) throw new Error(`Instagram 컨테이너 id 없음: ${JSON.stringify(createData)}`);
+  const creation_id = createData.id;
 
   // 이미지 처리 대기 (5초)
   await new Promise(r => setTimeout(r, 5000));
@@ -78,8 +86,13 @@ async function postToInstagram(text, imagePrompt, retry = 0, tokenOverride = nul
     const err = await publishRes.text();
     throw new Error(`Instagram 게시 실패: ${publishRes.status} ${err}`);
   }
-  const { id: post_id } = await publishRes.json();
-  return post_id;
+  let publishData;
+  try {
+    publishData = await publishRes.json();
+  } catch {
+    throw new Error('Instagram 게시 응답 파싱 실패');
+  }
+  return publishData.id;
 }
 
 export default async function handler(req) {
