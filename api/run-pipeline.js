@@ -11,6 +11,7 @@ const SUPA_URL      = process.env.SUPABASE_URL;
 const SUPA_KEY      = process.env.SUPABASE_SERVICE_KEY;
 const TG_TOKEN      = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOKEN;
 const TG_CHAT       = process.env.TELEGRAM_CHAT_ID;
+const TG_CHANNEL    = process.env.TELEGRAM_CHANNEL_ID; // 공개 채널 chat_id (예: @nova_ai_trends 또는 -100xxx)
 const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
 const GITHUB_REPO     = process.env.GITHUB_REPO || 'dkskwnslej0217-wq/nova-pipeline';
@@ -35,7 +36,7 @@ function filterKoreanOnly(text) {
     .trim();
 }
 
-// ─── Telegram 알림 ────────────────────────────────────────
+// ─── Telegram 개인 알림 ───────────────────────────────────
 async function tg(msg) {
   try {
     await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
@@ -44,6 +45,43 @@ async function tg(msg) {
       body: JSON.stringify({ chat_id: TG_CHAT, text: msg }),
     });
   } catch { /* 알림 실패는 무시 */ }
+}
+
+// ─── Telegram 채널 발행 ───────────────────────────────────
+async function postChannel(msg) {
+  if (!TG_CHANNEL || !TG_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TG_CHANNEL,
+        text: msg,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch { /* 채널 발행 실패는 파이프라인 중단 안 함 */ }
+}
+
+// ─── 채널용 트렌드 다이제스트 포맷 ──────────────────────
+function formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTrends, keywords) {
+  const date = new Date(Date.now() + 9 * 3600000);
+  const dateStr = `${date.getMonth() + 1}월 ${date.getDate()}일`;
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayStr = days[date.getDay()];
+
+  const sections = [
+    hnTrends.length     ? `🔥 <b>HackerNews AI</b>\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
+    phTrends.length     ? `🚀 <b>Product Hunt</b>\n${phTrends.slice(0,3).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
+    googleTrends.length ? `🇰🇷 <b>구글 트렌드</b>\n${googleTrends.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
+    redditTrends.length ? `💬 <b>Reddit</b>\n${redditTrends.slice(0,2).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
+    ghTrends.length     ? `⭐ <b>GitHub</b>\n${ghTrends.slice(0,2).map(t => `• ${t.slice(0,70)}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  const kwLine = keywords.split(',').map(k => `#${k.trim().replace(/\s/g,'')}`).join(' ');
+
+  return `🤖 <b>오늘의 AI 트렌드</b> — ${dateStr}(${dayStr})\n\n${sections}\n\n📌 <b>오늘의 키워드</b>\n${kwLine}\n\n<i>매일 아침 자동 업데이트 · NOVA AI</i>`;
 }
 
 // ─── 14a: YouTube TOP10 ───────────────────────────────────
@@ -449,6 +487,10 @@ export default async function handler(req, res) {
       await tg(`⚠️ Gemini 실패 → 기본 키워드 사용\n${e.message}`);
       keywords = 'AI자동화, 콘텐츠수익, 1인창업, SNS마케팅';
     }
+
+    // 텔레그램 채널 발행 (트렌드 다이제스트)
+    const channelPost = formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTrends, keywords);
+    postChannel(channelPost); // 비동기, 실패해도 파이프라인 계속
 
     // 14c Groq
     const hooksRaw = await generateHooks(keywords);
