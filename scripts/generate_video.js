@@ -309,7 +309,7 @@ asyncio.run(main())
 
   // 자막 스타일 (9:16 세로형 최적화)
   const subStyle = [
-    'FontName=NanumGothic', 'FontSize=36', 'Bold=1',
+    'FontName=NanumGothic', 'FontSize=22', 'Bold=1',
     'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
     'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
     'BorderStyle=3', 'Alignment=2', 'MarginV=120',
