@@ -598,60 +598,18 @@ export default async function handler(req, res) {
     //   await tg(`⚠️ Threads 발행 오류: ${e.message}`);
     // }
 
-    // Instagram 발행 — 글 내용 기반 이미지 프롬프트 (Groq 생성 우선, 폴백은 키워드 기반)
-    const imagePrompt = (groqImagePrompt && groqImagePrompt.length > 10)
-      ? groqImagePrompt + ', photorealistic, high quality, 4k, no text, no watermark'
-      : buildImagePromptFromKeywords(keywords);
-    try {
-      const igRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-instagram', {
-        method: 'POST',
-        headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: igContent, imagePrompt }),
-      });
-      const igRaw = await igRes.text();
-      let igData;
-      try { igData = JSON.parse(igRaw); } catch {
-        throw new Error(`IG 응답 파싱 실패 (${igRes.status}): ${igRaw.slice(0, 120)}`);
-      }
-      if (igData.ok) {
-        igStatus = '✅';
-      } else {
-        tg(`⚠️ Instagram 발행 실패: ${igData.error}`);
-      }
-    } catch(e) {
-      tg(`⚠️ Instagram 발행 오류: ${e.message}`);
-    }
+    // Instagram / Facebook / YouTube — GitHub Actions에서 영상으로 발행
+    // (사진 발행 제거, 영상 파이프라인이 모든 플랫폼 담당)
 
-    // Facebook 발행
-    try {
-      const fbRes = await fetch('https://nova-pipeline-two.vercel.app/api/post-facebook', {
-        method: 'POST',
-        headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: fbContent, imagePrompt }),
-      });
-      const fbRaw = await fbRes.text();
-      let fbData;
-      try { fbData = JSON.parse(fbRaw); } catch {
-        throw new Error(`FB 응답 파싱 실패 (${fbRes.status}): ${fbRaw.slice(0, 120)}`);
-      }
-      if (fbData.ok) {
-        fbStatus = '✅';
-      } else {
-        tg(`⚠️ Facebook 발행 실패: ${fbData.error}`);
-      }
-    } catch(e) {
-      tg(`⚠️ Facebook 발행 오류: ${e.message}`);
-    }
-
-    // 완료 요약 (1개)
+    // 시작 알림 (영상 완료 알림은 GitHub Actions에서 전송)
     const kst = new Date(Date.now() + 9 * 3600000).toISOString().slice(11, 16);
     const elapsed = Math.round((Date.now() - startMs) / 1000);
     const gtPreview = googleTrends.slice(0, 2).join(', ');
     await tg(
-      `✅ NOVA 완료 (${kst} KST)\n` +
+      `🚀 NOVA 콘텐츠 생성 완료 (${kst} KST)\n` +
       `📌 ${keywords}\n` +
       (gtPreview ? `🇰🇷 ${gtPreview}\n` : '') +
-      `📸 IG ${igStatus} | 📘 FB ${fbStatus} | 🎬 ${videoStatus}\n` +
+      `🎬 영상 생성 중... (완료 시 별도 알림)\n` +
       `⏱️ ${elapsed}초`
     );
 

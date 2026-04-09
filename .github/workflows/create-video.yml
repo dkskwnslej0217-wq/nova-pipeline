@@ -21,6 +21,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -39,16 +40,21 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg libass-dev fonts-nanum fonts-nanum-extra
           fc-cache -fv
-          ffmpeg -version | head -3
-          ffmpeg -filters 2>/dev/null | grep subtitles || echo "⚠️ subtitles 필터 없음"
+          ffmpeg -filters 2>/dev/null | grep -i subtitles || echo "⚠️ subtitles 필터 없음 — libass 확인 필요"
 
-      - name: 영상 생성 및 YouTube 업로드
+      - name: 영상 생성 및 발행
         env:
           SCRIPT_TEXT: ${{ github.event.client_payload.text || github.event.inputs.text }}
           SCRIPT_TITLE: ${{ github.event.client_payload.title || github.event.inputs.title }}
           SCRIPT_TAGS: ${{ github.event.client_payload.tags || github.event.inputs.tags }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_BUSINESS_ACCOUNT_ID: ${{ secrets.INSTAGRAM_BUSINESS_ACCOUNT_ID }}
+          FACEBOOK_ACCESS_TOKEN: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}

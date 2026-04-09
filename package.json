@@ -1,7 +1,9 @@
 {
   "type": "module",
   "dependencies": {
-    "googleapis": "^171.4.0"
+    "googleapis": "^171.4.0",
+    "@anthropic-ai/claude-agent-sdk": "latest",
+    "@supabase/supabase-js": "^2.49.4"
   },
   "scripts": {
     "test": "node test_pipeline.js"
