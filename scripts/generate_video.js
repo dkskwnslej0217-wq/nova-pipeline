@@ -115,6 +115,39 @@ async function downloadClip(query, index, fallbackIdx = 0) {
   return `clip_${index}.mp4`;
 }
 
+// ── 카카오프렌즈 스타일 캐릭터 생성 (Pollinations, 고정 seed) ────────
+async function generateCharacterImage() {
+  const prompt = [
+    'cute 2D cartoon character, round chubby face, big sparkly eyes,',
+    'simple short hair, kakao friends style, flat illustration,',
+    'pastel mint green background, kawaii, holding smartphone smiling,',
+    'full body, white outline, clean vector art, no text, no watermark',
+  ].join(' ');
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&seed=7777&model=flux&nologo=true`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 50000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 10000) {
+          fs.writeFileSync('character.png', buf);
+          console.log('✅ 캐릭터 이미지 생성 완료');
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn(`⚠️ 캐릭터 생성 재시도 (${attempt + 1}/3): ${e.message}`);
+    }
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  console.warn('⚠️ 캐릭터 생성 실패 — Pexels 폴백 사용');
+  return false;
+}
+
 // ── Supabase Storage 업로드 ────────────────────────────────────────
 async function uploadToSupabase(filePath) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
@@ -242,94 +275,110 @@ async function run() {
   const scriptText = (SCRIPT_TEXT || 'NOVA AI 자동화 콘텐츠입니다.').slice(0, 2500);
   const title = SCRIPT_TITLE || 'NOVA AI';
   const tags = (SCRIPT_TAGS || '').split(',').map(t => t.trim()).filter(Boolean);
+  const shortsTitle = `${title} #Shorts`.slice(0, 100);
 
-  // 영상 검색 키워드
-  const tagQueries = tags.slice(0, 2).map(t => KR_EN[t] || t);
-  const videoQueries = [...tagQueries, 'modern lifestyle people', 'city motion blur'].slice(0, 4);
-  console.log('🔑 영상 검색 키워드:', videoQueries);
+  // ── 0. 캐릭터 이미지 생성 (Pollinations) ─────────────────────
+  console.log('\n🎨 캐릭터 이미지 생성 중...');
+  const hasCharacter = await generateCharacterImage();
 
-  // ── 1. TTS ────────────────────────────────────────────────────
-  console.log('\n🎙️ TTS 생성 중...');
-  const ttsRes = await withRetry('TTS', () => fetch(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { text: scriptText },
-        voice: { languageCode: 'ko-KR', name: 'ko-KR-Neural2-A', ssmlGender: 'FEMALE' },
-        audioConfig: { audioEncoding: 'LINEAR16', speakingRate: 1.0 },
-      }),
-    }
-  ));
-  if (!ttsRes.ok) throw new Error(`TTS 실패: ${await ttsRes.text()}`);
-  fs.writeFileSync('audio.wav', Buffer.from((await ttsRes.json()).audioContent, 'base64'));
-  console.log('✅ audio.wav 저장');
+  // ── 1. TTS (edge-tts — 자연스러운 한국어 목소리) ──────────────
+  console.log('\n🎙️ TTS 생성 중 (edge-tts)...');
+  fs.writeFileSync('tts_script.txt', scriptText);
+  fs.writeFileSync('run_tts.py', `
+import asyncio, edge_tts
 
-  const audioDuration = getAudioDuration('audio.wav');
-  const clipDuration = Math.ceil(audioDuration / videoQueries.length) + 2;
-  console.log(`⏱️  오디오 ${audioDuration.toFixed(1)}초 / 클립당 ${clipDuration}초 × ${videoQueries.length}개`);
+async def main():
+    with open('tts_script.txt', encoding='utf-8') as f:
+        text = f.read()
+    comm = edge_tts.Communicate(text, "ko-KR-HyunsuNeural", rate="+10%", volume="+10%")
+    await comm.save("audio.mp3")
+
+asyncio.run(main())
+`);
+  execSync('python3 run_tts.py', { stdio: 'inherit' });
+  console.log('✅ audio.mp3 저장 (HyunsuNeural 남자 목소리)');
+
+  const audioDuration = getAudioDuration('audio.mp3');
+  console.log(`⏱️  오디오 ${audioDuration.toFixed(1)}초`);
 
   // ── 2. 자막 ───────────────────────────────────────────────────
   const srtPath = path.resolve('subtitles.srt');
   fs.writeFileSync(srtPath, generateSRT(scriptText));
   console.log('✅ subtitles.srt 저장');
-
-  // ── 3. 클립 다운로드 ──────────────────────────────────────────
-  console.log('\n🎥 배경 영상 다운로드 중...');
-  const clipPaths = [];
-  for (let i = 0; i < videoQueries.length; i++) {
-    try { clipPaths.push(await withRetry(`clip_${i}`, () => downloadClip(videoQueries[i], i))); }
-    catch (e) { console.warn(`  ⚠️ clip_${i} 스킵: ${e.message}`); }
-  }
-  if (clipPaths.length === 0) throw new Error('다운로드된 클립 없음');
-
-  // ── 4. FFmpeg 합성 ────────────────────────────────────────────
-  console.log('\n🎬 영상 합성 중...');
-  const FADE = 0.5;
-  const n = clipPaths.length;
-  const inputs = [...clipPaths, 'audio.wav'].map(p => `-i "${p}"`).join(' ');
-  const trimParts = clipPaths.map((_, i) =>
-    `[${i}:v]trim=duration=${clipDuration},setpts=PTS-STARTPTS,` +
-    `scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30[v${i}]`
-  );
-
-  let xfadeParts = [], prev = 'v0';
-  for (let i = 1; i < n; i++) {
-    const offset = (i * (clipDuration - FADE)).toFixed(2);
-    const next = i === n - 1 ? 'vjoined' : `xf${i}`;
-    xfadeParts.push(`[${prev}][v${i}]xfade=transition=fade:duration=${FADE}:offset=${offset}[${next}]`);
-    prev = next;
-  }
-
-  const subStyle = [
-    'FontName=NanumGothic', 'FontSize=28', 'Bold=1',
-    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
-    'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=2', 'MarginV=60',
-  ].join(',');
   const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-  let filterComplex;
-  if (n === 1) {
-    filterComplex = `${trimParts[0]};[v0]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
-  } else {
-    filterComplex = `${trimParts.join(';')};${xfadeParts.join(';')};[vjoined]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
-  }
+  // 자막 스타일 (9:16 세로형 최적화)
+  const subStyle = [
+    'FontName=NanumGothic', 'FontSize=36', 'Bold=1',
+    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
+    'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
+    'BorderStyle=3', 'Alignment=2', 'MarginV=120',
+  ].join(',');
 
-  execSync(
-    `ffmpeg -y ${inputs} -filter_complex "${filterComplex}" -map "[vout]" -map ${n}:a -c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k -shortest output.mp4`,
-    { stdio: 'inherit' }
-  );
-  console.log('✅ output.mp4 생성 완료');
+  // ── 3 & 4. 영상 합성 (캐릭터 or Pexels 폴백) ─────────────────
+  console.log('\n🎬 영상 합성 중...');
+
+  if (hasCharacter) {
+    // ── 캐릭터 배경 방식 (9:16 세로형 Shorts) ──────────────────
+    console.log('  → 캐릭터 배경 모드');
+    execSync(
+      `ffmpeg -y -loop 1 -i character.png -i audio.mp3 ` +
+      `-vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+      `subtitles=${srtEscaped}:force_style='${subStyle}'" ` +
+      `-c:v libx264 -preset fast -crf 20 -tune stillimage ` +
+      `-c:a aac -b:a 192k -shortest -t ${Math.min(audioDuration, 59)} output.mp4`,
+      { stdio: 'inherit' }
+    );
+  } else {
+    // ── Pexels 폴백 방식 (9:16 세로형) ─────────────────────────
+    console.log('  → Pexels 폴백 모드');
+    const tagQueries = tags.slice(0, 2).map(t => KR_EN[t] || t);
+    const videoQueries = [...tagQueries, 'people working office', 'city lifestyle'].slice(0, 4);
+    const clipPaths = [];
+    const clipDuration = Math.ceil(audioDuration / videoQueries.length) + 2;
+    for (let i = 0; i < videoQueries.length; i++) {
+      try { clipPaths.push(await withRetry(`clip_${i}`, () => downloadClip(videoQueries[i], i))); }
+      catch (e) { console.warn(`  ⚠️ clip_${i} 스킵: ${e.message}`); }
+    }
+    if (clipPaths.length === 0) throw new Error('클립 다운로드 실패');
+
+    const FADE = 0.5;
+    const n = clipPaths.length;
+    const inputs = [...clipPaths, 'audio.mp3'].map(p => `-i "${p}"`).join(' ');
+    // 9:16 세로형으로 crop
+    const trimParts = clipPaths.map((_, i) =>
+      `[${i}:v]trim=duration=${clipDuration},setpts=PTS-STARTPTS,fps=30,` +
+      `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v${i}]`
+    );
+    let xfadeParts = [], prev = 'v0';
+    for (let i = 1; i < n; i++) {
+      const offset = (i * (clipDuration - FADE)).toFixed(2);
+      const next = i === n - 1 ? 'vjoined' : `xf${i}`;
+      xfadeParts.push(`[${prev}][v${i}]xfade=transition=fade:duration=${FADE}:offset=${offset}[${next}]`);
+      prev = next;
+    }
+    let filterComplex;
+    if (n === 1) {
+      filterComplex = `${trimParts[0]};[v0]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
+    } else {
+      filterComplex = `${trimParts.join(';')};${xfadeParts.join(';')};[vjoined]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
+    }
+    execSync(
+      `ffmpeg -y ${inputs} -filter_complex "${filterComplex}" -map "[vout]" -map ${n}:a ` +
+      `-c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k -shortest output.mp4`,
+      { stdio: 'inherit' }
+    );
+    clipPaths.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+  }
+  console.log('✅ output.mp4 생성 완료 (9:16 세로형)');
 
   // ── 5. Supabase Storage 업로드 ────────────────────────────────
   console.log('\n☁️  Supabase 업로드 중...');
   const videoUrl = await withRetry('Supabase 업로드', () => uploadToSupabase('output.mp4'));
 
-  // ── 6. Instagram 릴스 + Facebook 릴스 + YouTube (병렬) ────────
+  // ── 6. Instagram 릴스 + Facebook 릴스 + YouTube Shorts (병렬) ─
   console.log('\n📤 플랫폼 발행 중...');
-  const caption = scriptText.slice(0, 2200);
+  const caption = `${scriptText.slice(0, 2100)}\n\n#Shorts #AI부업 #직장인 #자동화`;
 
   const [igResult, fbResult, ytResult] = await Promise.allSettled([
     withRetry('Instagram 릴스', () => postInstagramReel(videoUrl, caption)),
@@ -338,13 +387,14 @@ async function run() {
       const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
       auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
       const youtube = google.youtube({ version: 'v3', auth });
+      const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '자동화']), 'Shorts', 'AI부업', '직장인'];
       const res = await youtube.videos.insert({
         part: ['snippet', 'status'],
         requestBody: {
           snippet: {
-            title,
-            description: scriptText.slice(0, 500),
-            tags: tags.length ? tags : ['NOVA', 'AI', '자동화'],
+            title: shortsTitle,
+            description: `${scriptText.slice(0, 450)}\n\n#Shorts #AI부업 #직장인자동화`,
+            tags: allTags,
             categoryId: '28',
             defaultLanguage: 'ko',
           },
@@ -353,7 +403,7 @@ async function run() {
         media: { body: fs.createReadStream('output.mp4') },
       });
       const url = `https://youtu.be/${res.data.id}`;
-      console.log(`✅ YouTube 업로드: ${url}`);
+      console.log(`✅ YouTube Shorts 업로드: ${url}`);
       return url;
     })(),
   ]);
@@ -363,16 +413,17 @@ async function run() {
   const ytStatus = ytResult.status === 'fulfilled' ? `✅ ${ytResult.value}` : `❌ ${ytResult.reason?.message?.slice(0, 60)}`;
 
   // ── 7. 임시 파일 정리 ─────────────────────────────────────────
-  [...clipPaths, 'audio.wav', 'subtitles.srt', 'output.mp4'].forEach(f => {
+  ['character.png', 'audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'output.mp4'].forEach(f => {
     try { fs.unlinkSync(f); } catch {}
   });
 
   // ── 8. Telegram 결과 ──────────────────────────────────────────
   await tg(
     `🎬 NOVA 영상 발행 완료\n` +
-    `📸 Instagram 릴스: ${igStatus}\n` +
-    `📘 Facebook 릴스: ${fbStatus}\n` +
-    `▶️  YouTube: ${ytStatus}`
+    `🎨 캐릭터: ${hasCharacter ? '✅' : '⚠️ 폴백'}\n` +
+    `📸 Instagram: ${igStatus}\n` +
+    `📘 Facebook: ${fbStatus}\n` +
+    `▶️  YouTube Shorts: ${ytStatus}`
   );
   console.log('\n✅ 모든 발행 완료');
 }
