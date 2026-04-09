@@ -243,8 +243,8 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
   const phSection = phTrends.length ? `[PH AI신제품]\n${trim(phTrends).join('\n')}` : '';
   const context = [ytSection, hnSection, ghSection, rdSection, igSection, gtSection, phSection].filter(Boolean).join('\n\n');
 
-  const todayTopic = getDayTopic();
-  const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n오늘의 주제: ${todayTopic}\n\n위 주제에 맞게 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
+  const ctx = getContentContext();
+  const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n${ctx.fullContext}\n\n위 시리즈·주제에 맞게 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
     {
@@ -279,19 +279,59 @@ function buildImagePromptFromKeywords(keywords) {
   return en.slice(0, 2).join(', ') + ', Korean aesthetic, modern minimalist, high quality, 4k, no text, no watermark';
 }
 
-// ─── 요일별 직장인 주제 ───────────────────────────────────
-function getDayTopic() {
-  const day = new Date(Date.now() + 9 * 3600000).getDay(); // KST
-  const map = {
-    0: '일요일: AI 미래 이야기 — 다음 주를 준비하는 직장인의 시선',
-    1: '월요일: AI 툴 추천 — 지금 당장 업무에 쓸 수 있는 것',
-    2: '화요일: 업무 자동화 팁 — 반복 업무 끊어내는 법',
-    3: '수요일: 퇴근 후 부수입 — 현실적인 방법만',
-    4: '목요일: 생산성 팁 — 같은 시간에 더 많이 끝내는 법',
-    5: '금요일: 직장인 공감 — 나만 이런 거 아냐',
-    6: '토요일: 이번 주 AI 핵심 정리 — 놓쳤으면 지금 봐',
+// ─── 콘텐츠 컨텍스트 (요일 주제 + 월별 테마 + 시리즈 에피소드) ──
+function getContentContext() {
+  const kst = new Date(Date.now() + 9 * 3600000);
+  const day   = kst.getDay();
+  const month = kst.getMonth() + 1;
+  const date  = kst.getDate();
+
+  const dayTopics = {
+    0: 'AI 미래 이야기 — 다음 주를 준비하는 직장인의 시선',
+    1: 'AI 툴 추천 — 지금 당장 업무에 쓸 수 있는 것',
+    2: '업무 자동화 팁 — 반복 업무 끊어내는 법',
+    3: '퇴근 후 부수입 — 현실적인 방법만',
+    4: '생산성 팁 — 같은 시간에 더 많이 끝내는 법',
+    5: '직장인 공감 — 나만 이런 거 아냐',
+    6: '이번 주 AI 핵심 정리 — 놓쳤으면 지금 봐',
   };
-  return map[day];
+
+  const monthlyThemes = {
+    1:  '새해 목표 실현 — AI로 올해 달라지기',
+    2:  '절약·재테크 — 월급날 전에 챙기는 것',
+    3:  '봄 시작 — 이직·커리어 AI 활용',
+    4:  '연봉 협상 시즌 — AI로 준비하는 승급',
+    5:  '황금연휴·여행 — 부업으로 여행비 만들기',
+    6:  '상반기 회고 — AI로 점검하는 나',
+    7:  '여름·재택 — 자동화로 더 쉽게',
+    8:  '휴가 끝 복귀 — 자동화로 덜 힘들게',
+    9:  '하반기 시작 — AI 공부 시즌',
+    10: '연말 준비 — 연말정산·투자 점검',
+    11: '블랙프라이데이 — 무료 AI 툴 총정리',
+    12: '연말·한 해 마무리 — 내년 자동화 설계',
+  };
+
+  const seriesTopics = [
+    '', // 0 unused
+    '이메일 자동화',  '회의록 AI',      '보고서 초안',    '데이터 분석',
+    'ChatGPT 프롬프트', '노션 자동화',  '엑셀 AI',        '슬랙 자동화',
+    '채용공고 분석',  '자기소개서 AI',  '면접 준비 AI',   '연봉 협상 스크립트',
+    '업무 일정 자동화', '고객 응대 AI', '클레임 대응',    '기획서 AI',
+    'SNS 예약 자동화', '썸네일 AI',    '블로그 자동화',  '뉴스레터 AI',
+    '번역 자동화',    '노코드 앱 제작', 'AI 이미지 생성', '영상 편집 AI',
+    '부업 수익 계산', '세금 자동화',    '투자 AI 분석',   '절약 AI',
+    '건강 루틴 AI',   '독서 요약 AI',  '한 달 총정리',
+  ];
+
+  const episode = date <= 30 ? date : (date % 30 || 30);
+  return {
+    dayTopic:      dayTopics[day],
+    monthlyTheme:  monthlyThemes[month],
+    episode,
+    seriesTopic:   seriesTopics[episode] || 'AI 자동화 팁',
+    // 콘텐츠 프롬프트에 쓸 한 줄 요약
+    fullContext: `[시리즈] 직장인 AI 30일 챌린지 Day ${episode}: ${seriesTopics[episode] || 'AI 자동화 팁'}\n[월별 테마] ${monthlyThemes[month]}\n[오늘 주제] ${dayTopics[day]}`,
+  };
 }
 
 // ─── 콘텐츠 타입 랜덤 선택 ────────────────────────────────
@@ -307,11 +347,11 @@ function getContentType() {
 
 // ─── 플랫폼별 프롬프트 ────────────────────────────────────
 function getPlatformPrompts(keywords, hooks, type) {
-  const todayTopic = getDayTopic();
+  const ctx = getContentContext();
   const base = `
 너는 "AI 부업 자동화" 분야 한국 SNS 전문가야.
 타겟: 월급 받는 직장인, 부업 원하는 20~40대.
-오늘의 주제: ${todayTopic}
+${ctx.fullContext}
 주제: AI 자동화로 시간 아끼고 돈 버는 실용적인 팁.
 
 맞춤법 완벽. 오타 절대 금지. 한국어만.
@@ -592,7 +632,10 @@ export default async function handler(req, res) {
             event_type: 'create-video',
             client_payload: {
               text: ytFinal.slice(0, 2500),
-              title: `NOVA AI — ${topic}`,
+              title: (() => {
+                const ctx = getContentContext();
+                return `직장인 AI Day ${ctx.episode} — ${ctx.seriesTopic}`;
+              })(),
               tags: keywords.split(',').map(k => k.trim()).join(','),
             },
           }),
