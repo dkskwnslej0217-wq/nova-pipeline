@@ -608,7 +608,11 @@ export default async function handler(req, res) {
         headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: igContent, imagePrompt }),
       });
-      const igData = await igRes.json();
+      const igRaw = await igRes.text();
+      let igData;
+      try { igData = JSON.parse(igRaw); } catch {
+        throw new Error(`IG 응답 파싱 실패 (${igRes.status}): ${igRaw.slice(0, 120)}`);
+      }
       if (igData.ok) {
         igStatus = '✅';
       } else {
@@ -625,7 +629,11 @@ export default async function handler(req, res) {
         headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: fbContent, imagePrompt }),
       });
-      const fbData = await fbRes.json();
+      const fbRaw = await fbRes.text();
+      let fbData;
+      try { fbData = JSON.parse(fbRaw); } catch {
+        throw new Error(`FB 응답 파싱 실패 (${fbRes.status}): ${fbRaw.slice(0, 120)}`);
+      }
       if (fbData.ok) {
         fbStatus = '✅';
       } else {

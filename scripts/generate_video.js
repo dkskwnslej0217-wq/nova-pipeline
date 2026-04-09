@@ -2,6 +2,7 @@
 // 개선: 4개 클립 xfade 전환 + 키워드 매칭 + 자막 스타일 + 자동 길이 계산
 
 import fs from 'fs';
+import path from 'path';
 import { execSync } from 'child_process';
 import { google } from 'googleapis';
 
@@ -133,7 +134,8 @@ async function run() {
   console.log(`⏱️  오디오: ${audioDuration.toFixed(1)}초 / 클립당: ${clipDuration}초 × ${videoQueries.length}개`);
 
   // ── 2. 자막 ───────────────────────────────────────────────────
-  fs.writeFileSync('subtitles.srt', generateSRT(scriptText));
+  const srtPath = path.resolve('subtitles.srt');
+  fs.writeFileSync(srtPath, generateSRT(scriptText));
   console.log('✅ subtitles.srt 저장 완료');
 
   // ── 3. Pexels 클립 다운로드 ──────────────────────────────────
@@ -176,25 +178,28 @@ async function run() {
   // 자막 스타일: 크고 선명하게, 반투명 배경박스
   const subStyle = [
     'FontName=NanumGothic',
-    'FontSize=30',
+    'FontSize=28',
     'Bold=1',
-    'PrimaryColour=&H00FFFFFF',     // 흰색 글씨
-    'OutlineColour=&H00000000',     // 검정 외곽선
-    'BackColour=&HAA000000',        // 반투명 검정 배경
+    'PrimaryColour=&H00FFFFFF',
+    'OutlineColour=&H00000000',
+    'BackColour=&HAA000000',
     'Outline=2',
     'Shadow=0',
-    'BorderStyle=3',                // 배경박스 스타일
-    'Alignment=2',                  // 하단 중앙
+    'BorderStyle=3',
+    'Alignment=2',
     'MarginV=60',
   ].join(',');
+
+  // subtitles 필터에 절대경로 사용 (공백/특수문자 이스케이프)
+  const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
   // 단일 클립 vs 다중 클립
   let filterComplex;
   if (n === 1) {
-    filterComplex = `${trimParts[0]};[v0]subtitles=subtitles.srt:force_style='${subStyle}'[vout]`;
+    filterComplex = `${trimParts[0]};[v0]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
   } else {
     const joined = `${trimParts.join(';')};${xfadeParts.join(';')}`;
-    filterComplex = `${joined};[vjoined]subtitles=subtitles.srt:force_style='${subStyle}'[vout]`;
+    filterComplex = `${joined};[vjoined]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
   }
 
   const ffmpegCmd = [
