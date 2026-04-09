@@ -1,5 +1,5 @@
 // api/post-facebook.js — Facebook 페이지 자동 발행
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const FB_TOKEN   = process.env.FACEBOOK_ACCESS_TOKEN;
 const FB_PAGE_ID = process.env.FACEBOOK_PAGE_ID;
@@ -7,10 +7,12 @@ const PIPELINE_SECRET = process.env.PIPELINE_SECRET;
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 
 async function getPexelsPhoto(query) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
   const res = await fetch(
     `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
-    { headers: { Authorization: PEXELS_KEY } }
-  );
+    { headers: { Authorization: PEXELS_KEY }, signal: controller.signal }
+  ).finally(() => clearTimeout(timer));
   if (!res.ok) throw new Error(`Pexels ${res.status}`);
   const data = await res.json();
   if (!data.photos?.length) throw new Error('Pexels 사진 없음');

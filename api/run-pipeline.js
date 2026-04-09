@@ -124,7 +124,10 @@ async function fetchInstagramTop() {
   const res = await fetch(
     `https://graph.instagram.com/v21.0/${igId}/media?fields=caption,like_count&limit=20&access_token=${token}`
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`인스타 API ${res.status}: ${errText.slice(0, 100)}`);
+  }
   const data = await res.json();
   return (data.data || [])
     .filter(p => p.like_count > 0)
@@ -242,7 +245,7 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
 
   const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n"AI 부업 자동화" 분야 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -469,14 +472,19 @@ export default async function handler(req, res) {
     });
   } catch { /* 동기화 실패는 파이프라인 중단 안 함 */ }
 
-  // 토큰 만료 7일 전 경고
+  // 토큰 만료 경고
   const now = Date.now();
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
   for (const [platform, expiresAt] of Object.entries(TOKEN_EXPIRES)) {
     if (!expiresAt) continue;
-    const exp = parseInt(expiresAt) * 1000;
+    const exp = parseInt(expiresAt, 10) * 1000;
+    if (isNaN(exp)) {
+      await tg(`⚠️ ${platform.toUpperCase()} 토큰 만료일 형식 오류 (환경변수 확인 필요)`);
+      continue;
+    }
     const daysLeft = Math.floor((exp - now) / (24 * 60 * 60 * 1000));
-    if (daysLeft <= 7) {
+    if (daysLeft <= 0) {
+      await tg(`🚨 ${platform.toUpperCase()} 토큰 만료됨! 즉시 갱신하세요.`);
+    } else if (daysLeft <= 7) {
       await tg(`⚠️ ${platform.toUpperCase()} 토큰 만료 ${daysLeft}일 전! 지금 갱신하세요.`);
     }
   }
