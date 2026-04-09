@@ -291,7 +291,7 @@ async function run() {
   const inputs = [...clipPaths, 'audio.wav'].map(p => `-i "${p}"`).join(' ');
   const trimParts = clipPaths.map((_, i) =>
     `[${i}:v]trim=duration=${clipDuration},setpts=PTS-STARTPTS,` +
-    `scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080[v${i}]`
+    `scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=30[v${i}]`
   );
 
   let xfadeParts = [], prev = 'v0';
