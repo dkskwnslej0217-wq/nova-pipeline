@@ -90,7 +90,7 @@ const FALLBACK_QUERIES = ['technology city night', 'business success people', 'a
 
 async function downloadClip(query, index, fallbackIdx = 0) {
   const res = await fetch(
-    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&orientation=landscape&min_duration=5`,
+    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&orientation=portrait&min_duration=5`,
     { headers: { Authorization: PEXELS_API_KEY } }
   );
   if (!res.ok) throw new Error(`Pexels ${res.status}`);
@@ -102,7 +102,9 @@ async function downloadClip(query, index, fallbackIdx = 0) {
     throw new Error(`클립 없음: ${query}`);
   }
   const video = data.videos[Math.floor(Math.random() * Math.min(5, data.videos.length))];
-  const file = video.video_files.find(f => f.quality === 'hd' && f.width >= 1280)
+  // 세로형 우선 선택
+  const file = video.video_files.find(f => f.height >= f.width && f.quality === 'hd')
+    || video.video_files.find(f => f.quality === 'hd')
     || video.video_files.find(f => f.quality === 'sd')
     || video.video_files[0];
   if (!file?.link) throw new Error(`영상 URL 없음: ${query}`);
@@ -315,20 +317,80 @@ asyncio.run(main())
   }
   const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-  // 자막 스타일 (하단 중앙, 작게)
+  // 자막 스타일 (캐릭터 위에 표시)
   const subStyle = [
     'FontName=NanumGothic', 'FontSize=16', 'Bold=1',
     'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
     'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=2', 'MarginV=60',
+    'BorderStyle=3', 'Alignment=2', 'MarginV=400',
   ].join(',');
 
-  // ── 3 & 4. 영상 합성 (캐릭터 or Pexels 폴백) ─────────────────
+  // ── 3 & 4. 영상 합성 (배경 클립 + 캐릭터 하단 오버레이) ─────────
   console.log('\n🎬 영상 합성 중...');
 
-  if (hasCharacter) {
-    // ── 캐릭터 배경 모드 (Ken Burns 줌인 효과) ──────────────────
-    console.log('  → 캐릭터 Ken Burns 모드');
+  // 배경: Pexels 세로형 클립 4개
+  const tagQueries = tags.slice(0, 2).map(t => KR_EN[t] || t);
+  const videoQueries = [...tagQueries, 'office worker city', 'technology lifestyle'].slice(0, 4);
+  const clipPaths = [];
+  const clipDuration = Math.ceil(audioDuration / videoQueries.length) + 2;
+  for (let i = 0; i < videoQueries.length; i++) {
+    try { clipPaths.push(await withRetry(`clip_${i}`, () => downloadClip(videoQueries[i], i))); }
+    catch (e) { console.warn(`  ⚠️ clip_${i} 스킵: ${e.message}`); }
+  }
+
+  if (clipPaths.length > 0) {
+    // ── 배경 클립 + 캐릭터 오버레이 ──────────────────────────────
+    console.log(`  → 배경 ${clipPaths.length}개 + 캐릭터 오버레이`);
+    const FADE = 0.5;
+    const n = clipPaths.length;
+    const charIdx = n;
+    const audioIdx = hasCharacter ? n + 1 : n;
+
+    const inputParts = [
+      ...clipPaths.map(p => `-i "${p}"`),
+      ...(hasCharacter ? ['-loop 1 -i character.png'] : []),
+      `-i audio.mp3`,
+    ];
+
+    // 각 클립 → 1080x1920 세로형
+    let filterParts = clipPaths.map((_, i) =>
+      `[${i}:v]trim=duration=${clipDuration},setpts=PTS-STARTPTS,fps=30,` +
+      `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v${i}]`
+    );
+
+    // xfade 연결 → [bg]
+    if (n === 1) {
+      filterParts[0] = filterParts[0].replace('[v0]', '[bg]');
+    } else {
+      let prev = 'v0';
+      for (let i = 1; i < n; i++) {
+        const offset = (i * (clipDuration - FADE)).toFixed(2);
+        const next = i === n - 1 ? 'bg' : `xf${i}`;
+        filterParts.push(`[${prev}][v${i}]xfade=transition=fade:duration=${FADE}:offset=${offset}[${next}]`);
+        prev = next;
+      }
+    }
+
+    // 캐릭터 오버레이 → 자막
+    if (hasCharacter) {
+      filterParts.push(`[${charIdx}:v]scale=360:-1[char]`);
+      filterParts.push(`[bg][char]overlay=x=(W-w)/2:y=H-h-20[vchar]`);
+      filterParts.push(`[vchar]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`);
+    } else {
+      filterParts.push(`[bg]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`);
+    }
+
+    execSync(
+      `ffmpeg -y ${inputParts.join(' ')} -filter_complex "${filterParts.join(';')}" ` +
+      `-map "[vout]" -map ${audioIdx}:a ` +
+      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k -shortest output.mp4`,
+      { stdio: 'inherit' }
+    );
+    clipPaths.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+
+  } else if (hasCharacter) {
+    // ── Pexels 실패 시 Ken Burns 폴백 ─────────────────────────
+    console.log('  → Ken Burns 폴백 (Pexels 실패)');
     const totalFrames = Math.ceil(Math.min(audioDuration, 59) * 30) + 60;
     execSync(
       `ffmpeg -y -loop 1 -i character.png -i audio.mp3 ` +
@@ -339,45 +401,7 @@ asyncio.run(main())
       { stdio: 'inherit' }
     );
   } else {
-    // ── Pexels 폴백 방식 (9:16 세로형) ─────────────────────────
-    console.log('  → Pexels 폴백 모드');
-    const tagQueries = tags.slice(0, 2).map(t => KR_EN[t] || t);
-    const videoQueries = [...tagQueries, 'people working office', 'city lifestyle'].slice(0, 4);
-    const clipPaths = [];
-    const clipDuration = Math.ceil(audioDuration / videoQueries.length) + 2;
-    for (let i = 0; i < videoQueries.length; i++) {
-      try { clipPaths.push(await withRetry(`clip_${i}`, () => downloadClip(videoQueries[i], i))); }
-      catch (e) { console.warn(`  ⚠️ clip_${i} 스킵: ${e.message}`); }
-    }
-    if (clipPaths.length === 0) throw new Error('클립 다운로드 실패');
-
-    const FADE = 0.5;
-    const n = clipPaths.length;
-    const inputs = [...clipPaths, 'audio.mp3'].map(p => `-i "${p}"`).join(' ');
-    // 9:16 세로형으로 crop
-    const trimParts = clipPaths.map((_, i) =>
-      `[${i}:v]trim=duration=${clipDuration},setpts=PTS-STARTPTS,fps=30,` +
-      `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v${i}]`
-    );
-    let xfadeParts = [], prev = 'v0';
-    for (let i = 1; i < n; i++) {
-      const offset = (i * (clipDuration - FADE)).toFixed(2);
-      const next = i === n - 1 ? 'vjoined' : `xf${i}`;
-      xfadeParts.push(`[${prev}][v${i}]xfade=transition=fade:duration=${FADE}:offset=${offset}[${next}]`);
-      prev = next;
-    }
-    let filterComplex;
-    if (n === 1) {
-      filterComplex = `${trimParts[0]};[v0]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
-    } else {
-      filterComplex = `${trimParts.join(';')};${xfadeParts.join(';')};[vjoined]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
-    }
-    execSync(
-      `ffmpeg -y ${inputs} -filter_complex "${filterComplex}" -map "[vout]" -map ${n}:a ` +
-      `-c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k -shortest output.mp4`,
-      { stdio: 'inherit' }
-    );
-    clipPaths.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+    throw new Error('Pexels 클립도 없고 캐릭터도 없음');
   }
   console.log('✅ output.mp4 생성 완료 (9:16 세로형)');
 
