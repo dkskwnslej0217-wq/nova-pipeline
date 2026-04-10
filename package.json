@@ -3,13 +3,13 @@
   "dependencies": {
     "googleapis": "^171.4.0",
     "@anthropic-ai/claude-agent-sdk": "latest",
-    "@supabase/supabase-js": "^2.49.4"
+    "@supabase/supabase-js": "^2.49.4",
+    "canvas": "^3.2.3"
   },
   "scripts": {
     "test": "node test_pipeline.js"
   },
   "devDependencies": {
-    "canvas": "^3.2.3",
     "sharp": "^0.34.5"
   }
 }

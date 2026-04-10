@@ -1,9 +1,10 @@
-// scripts/generate_video.js — NOVA 영상 파이프라인 v3
-// 영상 생성 → Supabase Storage → Instagram 릴스 + Facebook 릴스 + YouTube
+// scripts/generate_video.js — NOVA 영상 파이프라인 v4
+// 슬라이드 스타일 (canvas) → ffmpeg 슬라이드쇼 → Supabase → IG/FB/YT
 
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { createCanvas, registerFont } from 'canvas';
 import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
 
@@ -16,6 +17,9 @@ const {
   YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN,
   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
 } = process.env;
+
+// ── 상수 ──────────────────────────────────────────────────────────
+const W = 1080, H = 1920, PAD = 80;
 
 // ── 자동 재시도 ────────────────────────────────────────────────────
 async function withRetry(label, fn, retries = 2, delayMs = 6000) {
@@ -46,23 +50,11 @@ function getAudioDuration(file) {
       `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${file}"`,
       { encoding: 'utf8' }
     ).trim();
-    return Math.max(10, parseFloat(out) || 30);
+    return Math.max(15, parseFloat(out) || 30);
   } catch { return 30; }
 }
 
-// ── SRT 자막 생성 ──────────────────────────────────────────────────
-function generateSRT(text) {
-  const sentences = text.match(/[^.!?。~\n]+[.!?。~]*/g) || [text];
-  let srt = '', time = 0;
-  sentences.forEach((s, i) => {
-    const clean = s.trim();
-    if (!clean) return;
-    const duration = Math.max(1.5, clean.length * 0.065);
-    srt += `${i + 1}\n${fmtTime(time)} --> ${fmtTime(time + duration)}\n${clean}\n\n`;
-    time += duration + 0.25;
-  });
-  return srt;
-}
+// ── SRT 자막 fallback ──────────────────────────────────────────────
 function fmtTime(sec) {
   const h = String(Math.floor(sec / 3600)).padStart(2, '0');
   const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
@@ -70,57 +62,439 @@ function fmtTime(sec) {
   const ms = String(Math.floor((sec % 1) * 1000)).padStart(3, '0');
   return `${h}:${m}:${s},${ms}`;
 }
-
-// ── 섹션 카드 SRT 생성 (우상단 오버레이용) ────────────────────────
-function buildCardsSRT(toolName, compareWith, combo, duration) {
-  const t1 = Math.max(8,  duration * 0.20);  // ~20% 지점: 소개 끝
-  const t2 = Math.max(20, duration * 0.65);  // ~65% 지점: 비교 끝
-  const fmt = (s) => {
-    const h  = String(Math.floor(s / 3600)).padStart(2, '0');
-    const m  = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-    const sc = String(Math.floor(s % 60)).padStart(2, '0');
-    const ms = String(Math.floor((s % 1) * 1000)).padStart(3, '0');
-    return `${h}:${m}:${sc},${ms}`;
-  };
-  const entries = [
-    `1\n${fmt(0)} --> ${fmt(t1)}\n🔧 ${toolName || 'AI 툴'}`,
-    compareWith
-      ? `2\n${fmt(t1)} --> ${fmt(t2)}\n${compareWith}`
-      : null,
-    combo
-      ? `3\n${fmt(t2)} --> ${fmt(duration)}\n💡 ${combo}`
-      : null,
-  ].filter(Boolean);
-  return entries.join('\n\n') + '\n';
+function generateSRT(text) {
+  const sentences = text.match(/[^.!?。~\n]+[.!?。~]*/g) || [text];
+  let srt = '', time = 0;
+  sentences.forEach((s, i) => {
+    const clean = s.trim();
+    if (!clean) return;
+    const dur = Math.max(1.5, clean.length * 0.065);
+    srt += `${i + 1}\n${fmtTime(time)} --> ${fmtTime(time + dur)}\n${clean}\n\n`;
+    time += dur + 0.25;
+  });
+  return srt;
 }
 
-// ── NOVA 캐릭터 (번들 고정 이미지 우선, 없으면 Pexels 폴백) ─────────
-async function generateCharacterImage() {
-  const bundled = path.join(path.dirname(new URL(import.meta.url).pathname), 'nova_character.png');
-  if (fs.existsSync(bundled)) {
-    fs.copyFileSync(bundled, 'character.png');
-    console.log('✅ 번들 캐릭터 사용 (nova_B)');
-    return true;
+// ── 폰트 등록 ─────────────────────────────────────────────────────
+function setupFonts() {
+  const candidates = [
+    ['/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf', { family: 'KorFont', weight: 'bold' }],
+    ['/usr/share/fonts/truetype/nanum/NanumGothic.ttf',     { family: 'KorFont' }],
+    ['/usr/share/fonts/opentype/nanum/NanumGothicBold.ttf', { family: 'KorFont', weight: 'bold' }],
+    ['/usr/share/fonts/opentype/nanum/NanumGothic.ttf',     { family: 'KorFont' }],
+  ];
+  let loaded = 0;
+  for (const [fp, opts] of candidates) {
+    if (fs.existsSync(fp)) {
+      try { registerFont(fp, opts); loaded++; } catch {}
+    }
   }
-  console.warn('⚠️ nova_character.png 없음 — Pexels 폴백 사용');
-  return false;
+  const family = loaded > 0 ? 'KorFont' : 'sans-serif';
+  console.log(loaded > 0 ? `✅ 폰트 등록 (${loaded}개): KorFont` : '⚠️ 폰트 없음 — sans-serif 사용');
+  return family;
+}
+
+// ── Canvas 유틸 ────────────────────────────────────────────────────
+function makeGradient(ctx) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0F172A');
+  g.addColorStop(1, '#1A2744');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function box(ctx, x, y, w, h, r, color, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+  ctx.restore();
+}
+
+function circle(ctx, cx, cy, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// 한국어 포함 텍스트 줄바꿈 (글자 단위)
+function wrap(ctx, text, x, y, maxW, lineH) {
+  let line = '', curY = y;
+  for (const ch of text) {
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, curY);
+      line = ch;
+      curY += lineH;
+    } else {
+      line = test;
+    }
+  }
+  if (line) { ctx.fillText(line, x, curY); curY += lineH; }
+  return curY;
+}
+
+// ── 슬라이드 1: 타이틀 ─────────────────────────────────────────────
+function slide1(FONT, toolName, toolDesc) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  makeGradient(ctx);
+
+  // 상단 NOVA 브랜드
+  box(ctx, 0, 0, W, 160, 0, '#0F172A');
+  ctx.font = `bold 40px "${FONT}"`;
+  ctx.fillStyle = '#3B82F6';
+  ctx.fillText('NOVA', PAD, 100);
+  ctx.font = `36px "${FONT}"`;
+  ctx.fillStyle = '#475569';
+  ctx.fillText('오늘의 AI 툴 소개', PAD + 110, 100);
+
+  // 파란 세로 강조선
+  ctx.fillStyle = '#3B82F6';
+  ctx.fillRect(PAD, 230, 8, 120);
+
+  // 라벨
+  ctx.font = `bold 44px "${FONT}"`;
+  ctx.fillStyle = '#94A3B8';
+  ctx.fillText('🔧  NEW AI TOOL', PAD + 24, 285);
+
+  // 툴 이름 (크게)
+  ctx.font = `bold 100px "${FONT}"`;
+  ctx.fillStyle = '#F8FAFC';
+  wrap(ctx, toolName, PAD, 440, W - PAD * 2, 115);
+
+  // 툴 설명 한 줄
+  ctx.font = `46px "${FONT}"`;
+  ctx.fillStyle = '#94A3B8';
+  const desc = toolDesc.length > 40 ? toolDesc.slice(0, 40) + '…' : toolDesc;
+  wrap(ctx, desc, PAD, 680, W - PAD * 2, 58);
+
+  // 하단 CTA 배너
+  box(ctx, PAD, H - 320, W - PAD * 2, 120, 60, '#1D4ED8');
+  ctx.font = `bold 48px "${FONT}"`;
+  ctx.fillStyle = '#BFDBFE';
+  ctx.fillText('👆  스크롤하지 마세요, 핵심만 알려드림', PAD + 30, H - 246);
+
+  // 장식 원
+  circle(ctx, W - 120, H - 500, 280, '#3B82F6');
+  ctx.fillStyle = '#0F172A';
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.arc(W - 120, H - 500, 260, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  return c;
+}
+
+// ── 슬라이드 2: 핵심 기능 3가지 ────────────────────────────────────
+function slide2(FONT, toolName, bullets) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  makeGradient(ctx);
+
+  ctx.font = `bold 52px "${FONT}"`;
+  ctx.fillStyle = '#3B82F6';
+  wrap(ctx, `${toolName}  이런 점이 달라요`, PAD, 180, W - PAD * 2, 64);
+
+  const colors  = ['#3B82F6', '#8B5CF6', '#06B6D4'];
+  const numBgs  = ['#1D4ED8', '#6D28D9', '#0E7490'];
+
+  bullets.slice(0, 3).forEach((bullet, i) => {
+    const y = 340 + i * 440;
+    box(ctx, PAD, y, W - PAD * 2, 390, 20, '#1E293B');
+
+    // 번호 원
+    circle(ctx, PAD + 70, y + 70, 55, numBgs[i]);
+    ctx.font = `bold 56px "${FONT}"`;
+    ctx.fillStyle = '#FFF';
+    ctx.fillText(`${i + 1}`, PAD + 50, y + 90);
+
+    // 텍스트
+    ctx.font = `bold 50px "${FONT}"`;
+    ctx.fillStyle = colors[i];
+    ctx.fillText(`POINT ${i + 1}`, PAD + 150, y + 80);
+
+    ctx.font = `44px "${FONT}"`;
+    ctx.fillStyle = '#E2E8F0';
+    wrap(ctx, bullet, PAD + 40, y + 160, W - PAD * 2 - 80, 56);
+  });
+
+  return c;
+}
+
+// ── 슬라이드 3: vs 비교 ────────────────────────────────────────────
+function slide3(FONT, toolName, compareWith) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  makeGradient(ctx);
+
+  ctx.font = `bold 54px "${FONT}"`;
+  ctx.fillStyle = '#F8FAFC';
+  ctx.fillText('이미 있는 거 아닌가요?', PAD, 190);
+  ctx.font = `42px "${FONT}"`;
+  ctx.fillStyle = '#64748B';
+  ctx.fillText('차이를 직접 비교해드릴게요', PAD, 260);
+
+  // 왼쪽 패널 (기존 툴)
+  box(ctx, PAD, 310, 430, 580, 20, '#1E293B');
+  ctx.font = `36px "${FONT}"`;
+  ctx.fillStyle = '#94A3B8';
+  ctx.fillText('기존', PAD + 30, 390);
+  ctx.font = `bold 68px "${FONT}"`;
+  ctx.fillStyle = '#F8FAFC';
+  wrap(ctx, compareWith || 'ChatGPT', PAD + 30, 470, 380, 78);
+  ctx.font = `38px "${FONT}"`;
+  ctx.fillStyle = '#64748B';
+  ctx.fillText('✗  모든 분야 범용', PAD + 30, 750);
+  ctx.fillText('✗  높은 비용', PAD + 30, 810);
+
+  // VS 배지
+  box(ctx, 450, 540, 180, 80, 40, '#DC2626');
+  ctx.font = `bold 52px "${FONT}"`;
+  ctx.fillStyle = '#FFF';
+  ctx.fillText('VS', 488, 596);
+
+  // 오른쪽 패널 (새 툴)
+  box(ctx, 650, 310, 380, 580, 20, '#1D4ED8');
+  ctx.font = `36px "${FONT}"`;
+  ctx.fillStyle = '#93C5FD';
+  ctx.fillText('신규', 680, 390);
+  ctx.font = `bold 68px "${FONT}"`;
+  ctx.fillStyle = '#F8FAFC';
+  wrap(ctx, toolName, 680, 470, 320, 78);
+  ctx.font = `38px "${FONT}"`;
+  ctx.fillStyle = '#BFDBFE';
+  ctx.fillText('✓  이 분야 특화', 680, 750);
+  ctx.fillText('✓  무료 시작 가능', 680, 810);
+
+  // 결론 배너
+  box(ctx, PAD, 940, W - PAD * 2, 180, 20, '#065F46');
+  ctx.font = `bold 48px "${FONT}"`;
+  ctx.fillStyle = '#34D399';
+  ctx.fillText('💡  결론', PAD + 30, 1010);
+  ctx.font = `44px "${FONT}"`;
+  ctx.fillStyle = '#A7F3D0';
+  wrap(ctx, `이 작업엔 ${toolName}가 압도적`, PAD + 30, 1065, W - PAD * 2 - 60, 52);
+
+  // 하단 설명 텍스트
+  ctx.font = `42px "${FONT}"`;
+  ctx.fillStyle = '#64748B';
+  wrap(ctx, `${compareWith || 'ChatGPT'}는 범용, ${toolName}는 전문화 — 목적에 맞게 쓰세요`, PAD, 1185, W - PAD * 2, 54);
+
+  return c;
+}
+
+// ── 슬라이드 4: 이렇게 써요 ────────────────────────────────────────
+function slide4(FONT, toolName, steps) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  makeGradient(ctx);
+
+  ctx.font = `bold 56px "${FONT}"`;
+  ctx.fillStyle = '#F8FAFC';
+  ctx.fillText('이렇게 쓰면 됩니다', PAD, 190);
+  ctx.font = `44px "${FONT}"`;
+  ctx.fillStyle = '#64748B';
+  wrap(ctx, `${toolName} 30초 시작 가이드`, PAD, 260, W - PAD * 2, 54);
+
+  const stepColors = ['#3B82F6', '#8B5CF6', '#10B981'];
+
+  steps.slice(0, 3).forEach((step, i) => {
+    const y = 340 + i * 470;
+    box(ctx, PAD, y, W - PAD * 2, 420, 20, '#1E293B');
+
+    // 단계 번호 원
+    circle(ctx, PAD + 70, y + 80, 60, stepColors[i]);
+    ctx.font = `bold 60px "${FONT}"`;
+    ctx.fillStyle = '#FFF';
+    ctx.fillText(`${i + 1}`, PAD + 47, y + 100);
+
+    // STEP 라벨
+    ctx.font = `bold 38px "${FONT}"`;
+    ctx.fillStyle = stepColors[i];
+    ctx.fillText(`STEP ${i + 1}`, PAD + 155, y + 70);
+
+    // 단계 내용
+    ctx.font = `46px "${FONT}"`;
+    ctx.fillStyle = '#E2E8F0';
+    wrap(ctx, step, PAD + 40, y + 160, W - PAD * 2 - 80, 58);
+  });
+
+  return c;
+}
+
+// ── 슬라이드 5: 조합 팁 + CTA ─────────────────────────────────────
+function slide5(FONT, toolName, combo) {
+  const c = createCanvas(W, H);
+  const ctx = c.getContext('2d');
+  makeGradient(ctx);
+
+  // 상단 초록 배너
+  box(ctx, 0, 0, W, 220, 0, '#065F46', 0.6);
+  ctx.font = `bold 52px "${FONT}"`;
+  ctx.fillStyle = '#34D399';
+  ctx.fillText('💡  이렇게 조합하면 끝납니다', PAD, 150);
+
+  // 조합 박스
+  box(ctx, PAD, 270, W - PAD * 2, 500, 24, '#064E3B');
+  ctx.font = `bold 100px "${FONT}"`;
+  ctx.fillStyle = '#6EE7B7';
+  ctx.fillText(toolName, PAD + 40, 400);
+  ctx.font = `bold 80px "${FONT}"`;
+  ctx.fillStyle = '#34D399';
+  ctx.fillText('+', PAD + 40, 510);
+  ctx.font = `60px "${FONT}"`;
+  ctx.fillStyle = '#A7F3D0';
+  wrap(ctx, combo || '기존 워크플로우 연결', PAD + 40, 570, W - PAD * 2 - 80, 70);
+
+  // 효과 설명
+  ctx.font = `48px "${FONT}"`;
+  ctx.fillStyle = '#94A3B8';
+  wrap(ctx, '이 조합이면 업무 시간이 눈에 띄게 줄어들어요', PAD, 860, W - PAD * 2, 60);
+
+  // 팔로우 CTA
+  box(ctx, PAD, 1020, W - PAD * 2, 160, 80, '#10B981');
+  ctx.font = `bold 52px "${FONT}"`;
+  ctx.fillStyle = '#FFF';
+  ctx.fillText('팔로우하고 매일 받아보세요  →', PAD + 50, 1118);
+
+  // NOVA 로고
+  ctx.font = `bold 44px "${FONT}"`;
+  ctx.fillStyle = '#3B82F6';
+  ctx.fillText('NOVA', PAD, H - 120);
+  ctx.font = `38px "${FONT}"`;
+  ctx.fillStyle = '#334155';
+  ctx.fillText('매일 새로운 AI 툴', PAD + 120, H - 120);
+
+  // 장식
+  circle(ctx, W + 100, H - 200, 350, '#10B981');
+  ctx.fillStyle = '#0F172A';
+  ctx.globalAlpha = 0.92;
+  ctx.beginPath();
+  ctx.arc(W + 100, H - 200, 330, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  return c;
+}
+
+// ── 콘텐츠 파싱 ────────────────────────────────────────────────────
+function parseContent(scriptText, toolName, compareWith, combo) {
+  const sentences = (scriptText.match(/[^.!?。\n]+[.!?。]*/g) || [scriptText])
+    .map(s => s.trim()).filter(s => s.length > 5);
+
+  const n = sentences.length;
+  const toolDesc = sentences[0] || `${toolName}을 소개합니다`;
+
+  const bullets = n >= 4
+    ? sentences.slice(1, 4)
+    : ['핵심 작업에 특화된 AI 엔진', '무료로 바로 시작 가능', '결과물을 바로 복사·활용'];
+
+  const steps = n >= 7
+    ? sentences.slice(Math.floor(n * 0.55), Math.floor(n * 0.55) + 3)
+    : [`${toolName} 사이트에서 무료 가입`, '원하는 내용을 입력하거나 업로드', '결과를 확인하고 바로 활용'];
+
+  return {
+    toolDesc,
+    bullets,
+    steps,
+    compareText: compareWith || 'ChatGPT',
+    comboText: combo || `${toolName}로 반복 작업 자동화`,
+  };
+}
+
+// ── 슬라이드 영상 생성 ─────────────────────────────────────────────
+async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath) {
+  const FONT = setupFonts();
+  const { toolDesc, bullets, steps, compareText, comboText } = parseContent(
+    scriptText, toolName, compareWith, combo
+  );
+
+  // 5개 슬라이드 PNG 생성
+  console.log('\n🎨 슬라이드 PNG 생성 중...');
+  const canvases = [
+    slide1(FONT, toolName, toolDesc),
+    slide2(FONT, toolName, bullets),
+    slide3(FONT, toolName, compareText),
+    slide4(FONT, toolName, steps),
+    slide5(FONT, toolName, comboText),
+  ];
+
+  const slidePaths = canvases.map((canvas, i) => {
+    const p = `slide${i + 1}.png`;
+    fs.writeFileSync(p, canvas.toBuffer('image/png'));
+    console.log(`  ✅ slide${i + 1}.png`);
+    return p;
+  });
+
+  // 각 슬라이드 지속 시간 (5등분)
+  const total = Math.min(audioDuration, 60);
+  const seg = total / 5;
+  const fadeDur = 0.4;
+
+  // 자막 스타일
+  const srtEscaped = path.resolve(srtPath).replace(/\\/g, '/').replace(/:/g, '\\:');
+  const subStyle = [
+    'FontName=NanumGothic', 'FontSize=17', 'Bold=1',
+    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
+    'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
+    'BorderStyle=3', 'Alignment=2', 'MarginV=70',
+  ].join(',');
+
+  // ffmpeg 입력 (각 슬라이드를 해당 시간만큼 루프)
+  const inputs = slidePaths
+    .map(p => `-loop 1 -t ${seg.toFixed(3)} -i ${p}`)
+    .join(' ');
+
+  // filter_complex: scale → fps → xfade 체인 → 자막
+  const scales = slidePaths
+    .map((_, i) => `[${i}:v]setsar=1,fps=30[s${i}]`)
+    .join(';');
+
+  let xfades = '';
+  let prev = 's0';
+  for (let i = 1; i < 5; i++) {
+    const out = i === 4 ? 'vslides' : `x${i}`;
+    // offset: (i)번째 전환 시작 위치 = i * (seg - fadeDur)
+    const offset = (i * (seg - fadeDur)).toFixed(3);
+    xfades += `;[${prev}][s${i}]xfade=transition=fade:duration=${fadeDur}:offset=${offset}[${out}]`;
+    prev = out;
+  }
+
+  const subFilter = `;[vslides]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
+  const filterComplex = scales + xfades + subFilter;
+
+  const totalDur = (5 * seg - 4 * fadeDur).toFixed(3);
+
+  console.log('\n🎬 ffmpeg 슬라이드쇼 합성 중...');
+  execSync(
+    `ffmpeg -y ${inputs} -i audio.mp3 ` +
+    `-filter_complex "${filterComplex}" ` +
+    `-map "[vout]" -map ${slidePaths.length}:a ` +
+    `-c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k ` +
+    `-t ${totalDur} output.mp4`,
+    { stdio: 'inherit' }
+  );
+  console.log('✅ output.mp4 생성 완료 (슬라이드 스타일)');
+
+  // 슬라이드 PNG 정리
+  slidePaths.forEach(p => { try { fs.unlinkSync(p); } catch {} });
 }
 
 // ── Supabase Storage 업로드 ────────────────────────────────────────
 async function uploadToSupabase(filePath) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-  // 버킷 없으면 생성 (이미 있으면 무시)
   await supabase.storage.createBucket('videos', { public: true }).catch(() => {});
-
   const fileName = `nova_${Date.now()}.mp4`;
   const fileBuffer = fs.readFileSync(filePath);
-
   const { data, error } = await supabase.storage
     .from('videos')
     .upload(fileName, fileBuffer, { contentType: 'video/mp4', upsert: true });
   if (error) throw new Error(`Supabase 업로드 실패: ${error.message}`);
-
   const { data: { publicUrl } } = supabase.storage.from('videos').getPublicUrl(data.path);
   console.log(`✅ Supabase 업로드 완료: ${publicUrl}`);
   return publicUrl;
@@ -132,7 +506,6 @@ async function postInstagramReel(videoUrl, caption) {
   const userId = INSTAGRAM_BUSINESS_ACCOUNT_ID;
   const base = `https://graph.instagram.com/v21.0`;
 
-  // 1단계: 컨테이너 생성
   const createRes = await fetch(`${base}/${userId}/media`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,10 +522,9 @@ async function postInstagramReel(videoUrl, caption) {
   const containerId = createData.id;
   console.log(`  📦 IG 컨테이너 ID: ${containerId}`);
 
-  // 2단계: 처리 대기 (최대 3분)
   console.log('  ⏳ Instagram 영상 처리 대기 중...');
   for (let i = 0; i < 18; i++) {
-    await new Promise(r => setTimeout(r, 10000)); // 10초 대기
+    await new Promise(r => setTimeout(r, 10000));
     const statusRes = await fetch(
       `${base}/${containerId}?fields=status_code&access_token=${token}`
     );
@@ -162,7 +534,6 @@ async function postInstagramReel(videoUrl, caption) {
     if (status_code === 'ERROR') throw new Error('IG 영상 처리 오류');
   }
 
-  // 3단계: 게시
   const publishRes = await fetch(`${base}/${userId}/media_publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -180,7 +551,6 @@ async function postFacebookReel(videoUrl, description) {
   const pageId = FACEBOOK_PAGE_ID;
   const base = `https://graph.facebook.com/v21.0`;
 
-  // 1단계: 업로드 세션 시작
   const startRes = await fetch(`${base}/${pageId}/video_reels`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -192,7 +562,6 @@ async function postFacebookReel(videoUrl, description) {
   const { video_id, upload_url } = startData;
   console.log(`  📦 FB video_id: ${video_id}`);
 
-  // 2단계: 영상 바이너리 업로드
   const videoBuffer = fs.readFileSync('output.mp4');
   const uploadRes = await fetch(upload_url, {
     method: 'POST',
@@ -208,7 +577,6 @@ async function postFacebookReel(videoUrl, description) {
   if (!uploadRes.ok) throw new Error(`FB 영상 업로드 실패: ${uploadRes.status}`);
   console.log('  ✅ FB 영상 업로드 완료');
 
-  // 3단계: 게시
   const finishRes = await fetch(`${base}/${pageId}/video_reels`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -231,15 +599,14 @@ async function postFacebookReel(videoUrl, description) {
 // ── 메인 ──────────────────────────────────────────────────────────
 async function run() {
   const scriptText = (SCRIPT_TEXT || 'NOVA AI 자동화 콘텐츠입니다.').slice(0, 2500);
-  const title = SCRIPT_TITLE || 'NOVA AI';
-  const tags = (SCRIPT_TAGS || '').split(',').map(t => t.trim()).filter(Boolean);
+  const title      = SCRIPT_TITLE || 'NOVA AI';
+  const tags       = (SCRIPT_TAGS || '').split(',').map(t => t.trim()).filter(Boolean);
+  const toolName   = SCRIPT_TOOL_NAME || title.replace('오늘의 AI 툴: ', '').trim();
+  const compareWith = SCRIPT_COMPARE || '';
+  const combo       = SCRIPT_COMBO   || '';
   const shortsTitle = `${title} #Shorts`.slice(0, 100);
 
-  // ── 0. 캐릭터 이미지 생성 (Pollinations) ─────────────────────
-  console.log('\n🎨 캐릭터 이미지 생성 중...');
-  const hasCharacter = await generateCharacterImage();
-
-  // ── 1. TTS (edge-tts — 자연스러운 한국어 목소리) ──────────────
+  // ── 1. TTS (edge-tts) ─────────────────────────────────────────
   console.log('\n🎙️ TTS 생성 중 (edge-tts)...');
   fs.writeFileSync('tts_script.txt', scriptText);
   fs.writeFileSync('run_tts.py', `
@@ -263,7 +630,6 @@ async def main():
                 af.write(chunk['data'])
             elif chunk['type'] == 'WordBoundary':
                 words.append((chunk['offset'], chunk['duration'], chunk['text']))
-    # 4단어씩 묶어서 SRT 생성
     cue_size = 4
     lines = []
     for i in range(0, len(words), cue_size):
@@ -274,116 +640,48 @@ async def main():
         lines.append(f"{i//cue_size+1}\\n{start} --> {end}\\n{txt}\\n")
     with open('subtitles.srt', 'w', encoding='utf-8') as sf:
         sf.write('\\n'.join(lines))
-    print(f"✅ 자막 {len(lines)}개 생성 (음성 싱크)")
+    print(f"✅ 자막 {len(lines)}개 생성")
 
 asyncio.run(main())
 `);
   execSync('python3 run_tts.py', { stdio: 'inherit' });
-  console.log('✅ audio.mp3 + subtitles.srt 저장 (HyunsuNeural 남자 목소리)');
+  console.log('✅ audio.mp3 + subtitles.srt 저장');
 
   const audioDuration = getAudioDuration('audio.mp3');
   console.log(`⏱️  오디오 ${audioDuration.toFixed(1)}초`);
 
-  // ── 2. 자막 (edge-tts SubMaker 생성, 없으면 추정 fallback) ──────
+  // ── 2. SRT 자막 확인 ─────────────────────────────────────────
   const srtPath = path.resolve('subtitles.srt');
   if (!fs.existsSync(srtPath) || fs.statSync(srtPath).size < 10) {
     fs.writeFileSync(srtPath, generateSRT(scriptText));
-    console.log('⚠️ subtitles.srt fallback (추정 타이밍)');
-  } else {
-    console.log('✅ subtitles.srt 사용 (edge-tts 정확 싱크)');
+    console.log('⚠️ subtitles.srt fallback');
   }
-  const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-  // ── 3. 카드 SRT 생성 (툴 비교 섹션 오버레이) ──────────────────
-  const toolName    = SCRIPT_TOOL_NAME || title.replace('오늘의 AI 툴: ', '').trim();
-  const compareWith = SCRIPT_COMPARE   || '';
-  const combo       = SCRIPT_COMBO     || '';
+  // ── 3. 슬라이드 영상 생성 ─────────────────────────────────────
+  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath);
 
-  const cardsSrt = buildCardsSRT(toolName, compareWith, combo, audioDuration);
-  fs.writeFileSync('cards.srt', cardsSrt);
-  const cardsEscaped = path.resolve('cards.srt').replace(/\\/g, '/').replace(/:/g, '\\:');
-  console.log(`✅ cards.srt 생성 (${cardsSrt.split('\n\n').length}개 카드)`);
-
-  // 자막 스타일 — 하단 나레이션 (캐릭터 아래)
-  const subStyle = [
-    'FontName=NanumGothic', 'FontSize=15', 'Bold=1',
-    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
-    'BackColour=&H88000000', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=2', 'MarginV=50',
-  ].join(',');
-
-  // 카드 스타일 — 우상단 섹션 카드
-  const cardStyle = [
-    'FontName=NanumGothic', 'FontSize=24', 'Bold=1',
-    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H001a1a2e',
-    'BackColour=&HBB1a1a2e', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=9', 'MarginR=25', 'MarginV=70',
-  ].join(',');
-
-  // ── 4. 영상 합성 (다크 배경 + 캐릭터 좌측 크게 + 카드 우상단) ──
-  console.log('\n🎬 영상 합성 중 (다크 배경 + 캐릭터 좌측 + 카드 오버레이)...');
-
-  const videoDuration = Math.min(audioDuration, 60);
-
-  if (hasCharacter) {
-    const filterParts = [
-      // 캐릭터: 좌측 중앙, 520px 너비, 2.5초 주기 8px 상하 움직임
-      `[1:v]scale=520:-1[char]`,
-      `[0:v][char]overlay=x=30:y=(H-h)/2+8*sin(6.28318*t/2.5):eval=frame[vchar]`,
-      // 섹션 카드 (우상단, 시간대별)
-      `[vchar]subtitles=${cardsEscaped}:force_style='${cardStyle}'[vcards]`,
-      // 나레이션 자막 (하단 중앙)
-      `[vcards]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`,
-    ];
-
-    execSync(
-      `ffmpeg -y ` +
-      `-f lavfi -i color=c=0x111827:size=1080x1920:rate=30 ` +
-      `-loop 1 -i character.png ` +
-      `-i audio.mp3 ` +
-      `-filter_complex "${filterParts.join(';')}" ` +
-      `-map "[vout]" -map 2:a ` +
-      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k ` +
-      `-t ${videoDuration} output.mp4`,
-      { stdio: 'inherit' }
-    );
-  } else {
-    // 캐릭터 없을 시 텍스트만
-    execSync(
-      `ffmpeg -y ` +
-      `-f lavfi -i color=c=0x111827:size=1080x1920:rate=30 ` +
-      `-i audio.mp3 ` +
-      `-filter_complex "[0:v]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]" ` +
-      `-map "[vout]" -map 1:a ` +
-      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k ` +
-      `-t ${videoDuration} output.mp4`,
-      { stdio: 'inherit' }
-    );
-  }
-  console.log('✅ output.mp4 생성 완료 (9:16 세로형)');
-
-  // ── 5. Supabase Storage 업로드 ────────────────────────────────
+  // ── 4. Supabase Storage 업로드 ────────────────────────────────
   console.log('\n☁️  Supabase 업로드 중...');
   const videoUrl = await withRetry('Supabase 업로드', () => uploadToSupabase('output.mp4'));
 
-  // ── 6. Instagram 릴스 + Facebook 릴스 + YouTube Shorts (병렬) ─
+  // ── 5. 플랫폼 발행 (병렬) ─────────────────────────────────────
   console.log('\n📤 플랫폼 발행 중...');
-  const caption = `${scriptText.slice(0, 2100)}\n\n#Shorts #AI툴 #오늘의AI #새로운AI #AI추천`;
+  const caption = `${scriptText.slice(0, 2100)}\n\n#AI툴 #오늘의AI #새로운AI #AI추천 #인공지능`;
 
   const [igResult, fbResult, ytResult] = await Promise.allSettled([
     withRetry('Instagram 릴스', () => postInstagramReel(videoUrl, caption)),
-    withRetry('Facebook 릴스', () => postFacebookReel(videoUrl, caption)),
+    withRetry('Facebook 릴스',  () => postFacebookReel(videoUrl, caption)),
     (async () => {
       const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
       auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
       const youtube = google.youtube({ version: 'v3', auth });
-      const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI', '인공지능'];
+      const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI'];
       const res = await youtube.videos.insert({
         part: ['snippet', 'status'],
         requestBody: {
           snippet: {
             title: shortsTitle,
-            description: `${scriptText.slice(0, 450)}\n\n#Shorts #AI부업 #직장인자동화`,
+            description: `${scriptText.slice(0, 450)}\n\n#Shorts #AI툴 #오늘의AI`,
             tags: allTags,
             categoryId: '28',
             defaultLanguage: 'ko',
@@ -402,15 +700,15 @@ asyncio.run(main())
   const fbStatus = fbResult.status === 'fulfilled' ? '✅' : `❌ ${fbResult.reason?.message?.slice(0, 60)}`;
   const ytStatus = ytResult.status === 'fulfilled' ? `✅ ${ytResult.value}` : `❌ ${ytResult.reason?.message?.slice(0, 60)}`;
 
-  // ── 7. 임시 파일 정리 ─────────────────────────────────────────
-  ['character.png', 'audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'cards.srt', 'output.mp4'].forEach(f => {
+  // ── 6. 임시 파일 정리 ─────────────────────────────────────────
+  ['audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'output.mp4'].forEach(f => {
     try { fs.unlinkSync(f); } catch {}
   });
 
-  // ── 8. Telegram 결과 ──────────────────────────────────────────
+  // ── 7. Telegram 결과 ──────────────────────────────────────────
   await tg(
     `🎬 NOVA 영상 발행 완료\n` +
-    `🎨 캐릭터: ${hasCharacter ? '✅' : '⚠️ 폴백'}\n` +
+    `🔧 툴: ${toolName}\n` +
     `📸 Instagram: ${igStatus}\n` +
     `📘 Facebook: ${fbStatus}\n` +
     `▶️  YouTube Shorts: ${ytStatus}`

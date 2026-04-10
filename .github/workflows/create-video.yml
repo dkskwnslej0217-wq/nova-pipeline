@@ -35,14 +35,18 @@ jobs:
       - name: 의존성 설치
         run: npm install
 
-      - name: FFmpeg + 한국어 폰트 + edge-tts 설치
+      - name: FFmpeg + 한국어 폰트 + edge-tts + canvas 빌드 의존성 설치
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg libass-dev fonts-nanum fonts-nanum-extra python3-pip
+          sudo apt-get install -y \
+            ffmpeg libass-dev fonts-nanum fonts-nanum-extra python3-pip \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+            build-essential pkg-config
           pip3 install edge-tts --quiet
           fc-cache -fv
-          ffmpeg -filters 2>/dev/null | grep -i subtitles || echo "⚠️ subtitles 필터 없음 — libass 확인 필요"
+          ffmpeg -filters 2>/dev/null | grep -i subtitles || echo "⚠️ subtitles 필터 없음"
           edge-tts --list-voices | grep ko-KR || echo "⚠️ 한국어 음성 없음"
+          fc-list | grep -i nanum || echo "⚠️ Nanum 폰트 없음"
 
       - name: 영상 생성 및 발행
         env:
