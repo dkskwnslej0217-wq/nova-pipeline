@@ -264,26 +264,40 @@ async function run() {
   console.log('\n🎙️ TTS 생성 중 (edge-tts)...');
   fs.writeFileSync('tts_script.txt', scriptText);
   fs.writeFileSync('run_tts.py', `
-import asyncio, edge_tts
+import asyncio, edge_tts, sys
 
 async def main():
     with open('tts_script.txt', encoding='utf-8') as f:
         text = f.read()
     comm = edge_tts.Communicate(text, "ko-KR-HyunsuNeural", rate="+10%", volume="+10%")
-    await comm.save("audio.mp3")
+    submaker = edge_tts.SubMaker()
+    with open('audio.mp3', 'wb') as audio_file:
+        async for chunk in comm.stream():
+            if chunk['type'] == 'audio':
+                audio_file.write(chunk['data'])
+            elif chunk['type'] == 'WordBoundary':
+                submaker.create_sub((chunk['offset'], chunk['duration']), chunk['text'])
+    srt = submaker.generate_subs(words_in_cue=4)
+    with open('subtitles.srt', 'w', encoding='utf-8') as f:
+        f.write(srt)
+    print(f"✅ 자막 {srt.count('-->')}개 생성 (음성 싱크 맞춤)")
 
 asyncio.run(main())
 `);
   execSync('python3 run_tts.py', { stdio: 'inherit' });
-  console.log('✅ audio.mp3 저장 (HyunsuNeural 남자 목소리)');
+  console.log('✅ audio.mp3 + subtitles.srt 저장 (HyunsuNeural 남자 목소리)');
 
   const audioDuration = getAudioDuration('audio.mp3');
   console.log(`⏱️  오디오 ${audioDuration.toFixed(1)}초`);
 
-  // ── 2. 자막 ───────────────────────────────────────────────────
+  // ── 2. 자막 (edge-tts SubMaker 생성, 없으면 추정 fallback) ──────
   const srtPath = path.resolve('subtitles.srt');
-  fs.writeFileSync(srtPath, generateSRT(scriptText));
-  console.log('✅ subtitles.srt 저장');
+  if (!fs.existsSync(srtPath) || fs.statSync(srtPath).size < 10) {
+    fs.writeFileSync(srtPath, generateSRT(scriptText));
+    console.log('⚠️ subtitles.srt fallback (추정 타이밍)');
+  } else {
+    console.log('✅ subtitles.srt 사용 (edge-tts 정확 싱크)');
+  }
   const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
   // 자막 스타일 (하단 중앙, 작게)
