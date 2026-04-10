@@ -241,7 +241,7 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
   const context = [phSection, hnSection, ghSection, rdSection].filter(Boolean).join('\n\n');
 
   const ctx = getContentContext();
-  const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 조건: 실제로 사용 가능한 도구, 한국 사용자에게 유용한 것, 가능하면 무료/프리미엄 플랜 있는 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (30자 이내)|||누구에게 필요한지 (20자 이내)|||무료/유료/프리미엄\n\n예시:\nPerplexity AI|||실시간 검색 + AI 답변 통합 도구|||리서치하는 모든 사람|||무료`;
+  const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 실제로 사용 가능하고 한국 사용자에게 유용한 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (25자 이내)|||대상 (15자 이내)|||무료/유료/프리미엄|||비교할 대형 툴 1개 이름만 (ChatGPT/Notion/Canva/Figma/Google/YouTube 중 가장 비슷한 것)\n\n예시:\nPerplexity AI|||AI가 출처 포함해서 검색해주는 도구|||리서치하는 사람|||무료|||ChatGPT`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
     {
@@ -367,10 +367,10 @@ YouTube Shorts 나레이션 작성:
 
 // ─── 14c: Groq 훅 초안 ───────────────────────────────────
 async function generateHooks(keywords) {
-  // keywords 형식: "툴이름|||설명|||대상|||무료/유료"
+  // keywords 형식: "툴이름|||설명|||대상|||무료/유료|||비교툴"
   const parts = keywords.split('|||');
-  const toolName = parts[0]?.trim() || 'AI 툴';
-  const toolDesc = parts[1]?.trim() || '';
+  const toolName   = parts[0]?.trim() || 'AI 툴';
+  const compareWith = parts[4]?.trim() || 'ChatGPT';
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
@@ -378,7 +378,7 @@ async function generateHooks(keywords) {
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       messages: [
         { role: 'system', content: '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. AI 티 없이 진짜 사람 말투. 한국어만.' },
-        { role: 'user', content: `오늘 소개할 AI 툴: ${toolName} — ${toolDesc}\n\n이 툴을 소개하는 첫 줄 훅 3개. 각 25자 이내. 번호 없이. "이거 알아?" "이미 쓰는 사람은 알지" 식으로 궁금증 유발. 오타 없이.` }
+        { role: 'user', content: `새 AI 툴: ${toolName} / 비교 대상: ${compareWith}\n\n비교 소개 훅 3개. 각 25자 이내. 번호 없이.\n"${compareWith} 쓰는 사람 이거 알아?" / "${compareWith}보다 이게 나은 이유" 식으로. 오타 없이.` }
       ],
       max_tokens: 100,
     }),
@@ -390,15 +390,16 @@ async function generateHooks(keywords) {
 
 // ─── 14d: 최종 완성 (1번 Groq 호출 → 3개 플랫폼 동시 생성) ──
 async function finalizeContent(keywords, hooks) {
-  // keywords 형식: "툴이름|||설명|||대상|||무료/유료"
+  // keywords 형식: "툴이름|||설명|||대상|||무료/유료|||비교툴"
   const parts = keywords.split('|||');
-  const toolName   = parts[0]?.trim() || 'AI 툴';
-  const toolDesc   = parts[1]?.trim() || '';
-  const toolTarget = parts[2]?.trim() || '';
-  const toolPrice  = parts[3]?.trim() || '';
+  const toolName    = parts[0]?.trim() || 'AI 툴';
+  const toolDesc    = parts[1]?.trim() || '';
+  const toolTarget  = parts[2]?.trim() || '';
+  const toolPrice   = parts[3]?.trim() || '';
+  const compareWith = parts[4]?.trim() || 'ChatGPT';
 
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
-  const userMsg = `오늘 소개할 AI 툴: ${toolName}\n설명: ${toolDesc}\n대상: ${toolTarget}\n가격: ${toolPrice}\n훅 후보: ${hooks}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 4개 작성:\n\n===IG===\n🔧 [훅 20자 이내 — 툴 이름 또는 강렬한 첫 줄]\n\n• 이름: ${toolName}\n• [툴이 하는 것 한 줄]\n• [누구에게 필요한지 한 줄]\n• ${toolPrice}\n\n💡 [한 줄 평가 — "이미 쓰는 사람 있음" 식]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(툴 소개 + 어떤 상황에 쓰면 좋은지 스토리 3~4줄 + "써봤어?" 댓글유도, 이모지 1~2개, 180자 이내)\n\n===YT===\n(나레이션: "오늘 소개할 AI는 ${toolName}이야." 로 시작 → 뭐 하는 툴인지 → 누가 쓰면 좋은지 → 무료/유료 → 마무리 한 줄 여운. 말하듯 자연스럽게, 150자 이내)\n\n===IMG===\n(English only, 12 words max: realistic photo scene matching this AI tool introduction. Person using laptop or phone, modern setting, natural lighting, no text, no robot. Example: "young Korean person using AI app on laptop in minimalist office")`;
+  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}\n훅 후보: ${hooks}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 6개 작성:\n\n===IG===\n🔧 [훅 20자 — "${compareWith} 쓰는 사람 주목" 식]\n\n• ${toolName}: [핵심 기능 한 줄]\n• ${compareWith}보다 나은 점: [한 줄]\n• ${compareWith}이 더 나은 점: [한 줄]\n\n💡 [조합 팁 한 줄 — "이 두 개 같이 쓰면" 식]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(아침 브리핑 형식: "오늘 새로 나온 ${toolName}" → ${compareWith}랑 뭐가 다른지 → 어떤 상황에 쓰면 좋은지 → "써봤어?" 댓글유도. 이모지 2~3개, 200자 이내)\n\n===YT===\n(나레이션 45초 분량: "${compareWith} 쓰는 사람, 이거 알아?" 로 시작 → ${toolName} 한 줄 소개 → ${compareWith}랑 비교 장단점 → 조합 쓰는 법 → 마무리 한 줄. 말하듯 자연스럽게, 200자 이내)\n\n===IMG===\n(English only, 12 words max: realistic photo, person using laptop/phone, modern setting, natural light, no text)\n\n===COMPARE===\n(딱 1줄: vs ${compareWith} ✅ ${toolName} 장점 한 가지 ❌ ${toolName} 단점 한 가지, 30자 이내)\n\n===COMBO===\n(딱 1줄: ${toolName}은 [상황]에, ${compareWith}은 [상황]에 써, 25자 이내)`;
 
   async function callGroq() {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -434,11 +435,16 @@ async function finalizeContent(keywords, hooks) {
   };
 
   const imgRaw = extract('IMG').replace(/['"]/g, '').trim();
-  // 영어 단어 포함 + 50자 이내인 경우만 유효한 이미지 프롬프트로 인정
   const imagePrompt = (imgRaw.length > 5 && imgRaw.length < 200 && /[a-zA-Z]/.test(imgRaw))
-    ? imgRaw
-    : '';
-  return { igText: extract('IG'), fbText: extract('FB'), ytText: extract('YT'), imagePrompt };
+    ? imgRaw : '';
+  return {
+    igText: extract('IG'),
+    fbText: extract('FB'),
+    ytText: extract('YT'),
+    imagePrompt,
+    compareText: extract('COMPARE'),
+    comboText:   extract('COMBO'),
+  };
 }
 
 
@@ -567,7 +573,7 @@ export default async function handler(req, res) {
     const hooks = filterKoreanOnly(hooksRaw);
 
     // 14d 콘텐츠 생성 (플랫폼별)
-    const { igText, fbText, ytText, imagePrompt: groqImagePrompt } = await finalizeContent(keywords, hooks);
+    const { igText, fbText, ytText, imagePrompt: groqImagePrompt, compareText, comboText } = await finalizeContent(keywords, hooks);
     const igFinal = filterKoreanOnly(igText);
     const fbFinal = filterKoreanOnly(fbText);
     const ytFinal = filterKoreanOnly(ytText);
@@ -612,6 +618,9 @@ export default async function handler(req, res) {
               text: ytFinal.slice(0, 2500),
               title: `오늘의 AI 툴: ${toolName}`,
               tags: keywords.split('|||').slice(0, 2).map(k => k.trim()).join(', '),
+              tool_name:    toolName,
+              compare_with: keywords.split('|||')[4]?.trim() || '',
+              combo_tip:    comboText || '',
             },
           }),
         }

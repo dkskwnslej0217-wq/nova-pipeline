@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const {
   SCRIPT_TEXT, SCRIPT_TITLE, SCRIPT_TAGS,
-  GOOGLE_TTS_KEY, PEXELS_API_KEY,
+  SCRIPT_TOOL_NAME, SCRIPT_COMPARE, SCRIPT_COMBO,
   SUPABASE_URL, SUPABASE_SERVICE_KEY,
   INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_BUSINESS_ACCOUNT_ID,
   FACEBOOK_ACCESS_TOKEN, FACEBOOK_PAGE_ID,
@@ -71,50 +71,27 @@ function fmtTime(sec) {
   return `${h}:${m}:${s},${ms}`;
 }
 
-// ── 키워드 → 영어 매핑 ─────────────────────────────────────────────
-const KR_EN = {
-  'AI자동화': 'artificial intelligence automation technology',
-  'AI': 'artificial intelligence futuristic',
-  '콘텐츠수익': 'content creator studio laptop',
-  '1인창업': 'startup entrepreneur success',
-  'SNS마케팅': 'social media marketing digital',
-  '재테크': 'investment finance growth',
-  '부동산': 'real estate city modern building',
-  '건강': 'healthy lifestyle wellness',
-  '트렌드': 'trending modern urban lifestyle',
-  '미래': 'futuristic technology city',
-};
-
-// ── Pexels 클립 다운로드 ───────────────────────────────────────────
-const FALLBACK_QUERIES = ['technology city night', 'business success people', 'abstract futuristic', 'nature landscape'];
-
-async function downloadClip(query, index, fallbackIdx = 0) {
-  const res = await fetch(
-    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=8&orientation=portrait&min_duration=5`,
-    { headers: { Authorization: PEXELS_API_KEY } }
-  );
-  if (!res.ok) throw new Error(`Pexels ${res.status}`);
-  const data = await res.json();
-
-  if (!data.videos?.length) {
-    if (fallbackIdx < FALLBACK_QUERIES.length)
-      return downloadClip(FALLBACK_QUERIES[fallbackIdx], index, fallbackIdx + 1);
-    throw new Error(`클립 없음: ${query}`);
-  }
-  const video = data.videos[Math.floor(Math.random() * Math.min(5, data.videos.length))];
-  // 세로형 우선 선택
-  const file = video.video_files.find(f => f.height >= f.width && f.quality === 'hd')
-    || video.video_files.find(f => f.quality === 'hd')
-    || video.video_files.find(f => f.quality === 'sd')
-    || video.video_files[0];
-  if (!file?.link) throw new Error(`영상 URL 없음: ${query}`);
-
-  const dlRes = await fetch(file.link, { signal: AbortSignal.timeout(60000) });
-  if (!dlRes.ok) throw new Error(`다운로드 실패: ${dlRes.status}`);
-  const buf = await dlRes.arrayBuffer();
-  fs.writeFileSync(`clip_${index}.mp4`, Buffer.from(buf));
-  console.log(`  ✅ clip_${index}.mp4 — "${query}" (${file.width}x${file.height})`);
-  return `clip_${index}.mp4`;
+// ── 섹션 카드 SRT 생성 (우상단 오버레이용) ────────────────────────
+function buildCardsSRT(toolName, compareWith, combo, duration) {
+  const t1 = Math.max(8,  duration * 0.20);  // ~20% 지점: 소개 끝
+  const t2 = Math.max(20, duration * 0.65);  // ~65% 지점: 비교 끝
+  const fmt = (s) => {
+    const h  = String(Math.floor(s / 3600)).padStart(2, '0');
+    const m  = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const sc = String(Math.floor(s % 60)).padStart(2, '0');
+    const ms = String(Math.floor((s % 1) * 1000)).padStart(3, '0');
+    return `${h}:${m}:${sc},${ms}`;
+  };
+  const entries = [
+    `1\n${fmt(0)} --> ${fmt(t1)}\n🔧 ${toolName || 'AI 툴'}`,
+    compareWith
+      ? `2\n${fmt(t1)} --> ${fmt(t2)}\n${compareWith}`
+      : null,
+    combo
+      ? `3\n${fmt(t2)} --> ${fmt(duration)}\n💡 ${combo}`
+      : null,
+  ].filter(Boolean);
+  return entries.join('\n\n') + '\n';
 }
 
 // ── NOVA 캐릭터 (번들 고정 이미지 우선, 없으면 Pexels 폴백) ─────────
@@ -317,91 +294,71 @@ asyncio.run(main())
   }
   const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-  // 자막 스타일 (캐릭터 위에 표시)
+  // ── 3. 카드 SRT 생성 (툴 비교 섹션 오버레이) ──────────────────
+  const toolName    = SCRIPT_TOOL_NAME || title.replace('오늘의 AI 툴: ', '').trim();
+  const compareWith = SCRIPT_COMPARE   || '';
+  const combo       = SCRIPT_COMBO     || '';
+
+  const cardsSrt = buildCardsSRT(toolName, compareWith, combo, audioDuration);
+  fs.writeFileSync('cards.srt', cardsSrt);
+  const cardsEscaped = path.resolve('cards.srt').replace(/\\/g, '/').replace(/:/g, '\\:');
+  console.log(`✅ cards.srt 생성 (${cardsSrt.split('\n\n').length}개 카드)`);
+
+  // 자막 스타일 — 하단 나레이션 (캐릭터 아래)
   const subStyle = [
-    'FontName=NanumGothic', 'FontSize=16', 'Bold=1',
+    'FontName=NanumGothic', 'FontSize=15', 'Bold=1',
     'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
-    'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=2', 'MarginV=400',
+    'BackColour=&H88000000', 'Outline=2', 'Shadow=0',
+    'BorderStyle=3', 'Alignment=2', 'MarginV=50',
   ].join(',');
 
-  // ── 3 & 4. 영상 합성 (배경 클립 + 캐릭터 하단 오버레이) ─────────
-  console.log('\n🎬 영상 합성 중...');
+  // 카드 스타일 — 우상단 섹션 카드
+  const cardStyle = [
+    'FontName=NanumGothic', 'FontSize=24', 'Bold=1',
+    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H001a1a2e',
+    'BackColour=&HBB1a1a2e', 'Outline=2', 'Shadow=0',
+    'BorderStyle=3', 'Alignment=9', 'MarginR=25', 'MarginV=70',
+  ].join(',');
 
-  // 배경: Pexels 세로형 클립 4개
-  const tagQueries = tags.slice(0, 2).map(t => KR_EN[t] || t);
-  const videoQueries = [...tagQueries, 'office worker city', 'technology lifestyle'].slice(0, 4);
-  const clipPaths = [];
-  const clipDuration = Math.ceil(audioDuration / videoQueries.length) + 2;
-  for (let i = 0; i < videoQueries.length; i++) {
-    try { clipPaths.push(await withRetry(`clip_${i}`, () => downloadClip(videoQueries[i], i))); }
-    catch (e) { console.warn(`  ⚠️ clip_${i} 스킵: ${e.message}`); }
-  }
+  // ── 4. 영상 합성 (다크 배경 + 캐릭터 좌측 크게 + 카드 우상단) ──
+  console.log('\n🎬 영상 합성 중 (다크 배경 + 캐릭터 좌측 + 카드 오버레이)...');
 
-  if (clipPaths.length > 0) {
-    // ── 배경 클립 + 캐릭터 오버레이 ──────────────────────────────
-    console.log(`  → 배경 ${clipPaths.length}개 + 캐릭터 오버레이`);
-    const FADE = 0.5;
-    const n = clipPaths.length;
-    const charIdx = n;
-    const audioIdx = hasCharacter ? n + 1 : n;
+  const videoDuration = Math.min(audioDuration, 60);
 
-    const inputParts = [
-      ...clipPaths.map(p => `-i "${p}"`),
-      ...(hasCharacter ? ['-loop 1 -i character.png'] : []),
-      `-i audio.mp3`,
+  if (hasCharacter) {
+    const filterParts = [
+      // 캐릭터: 좌측 중앙, 520px 너비, 2.5초 주기 8px 상하 움직임
+      `[1:v]scale=520:-1[char]`,
+      `[0:v][char]overlay=x=30:y=(H-h)/2+8*sin(6.28318*t/2.5):eval=frame[vchar]`,
+      // 섹션 카드 (우상단, 시간대별)
+      `[vchar]subtitles=${cardsEscaped}:force_style='${cardStyle}'[vcards]`,
+      // 나레이션 자막 (하단 중앙)
+      `[vcards]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`,
     ];
 
-    // 각 클립 → 1080x1920 세로형
-    let filterParts = clipPaths.map((_, i) =>
-      `[${i}:v]trim=duration=${clipDuration},setpts=PTS-STARTPTS,fps=30,` +
-      `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v${i}]`
-    );
-
-    // xfade 연결 → [bg]
-    if (n === 1) {
-      filterParts[0] = filterParts[0].replace('[v0]', '[bg]');
-    } else {
-      let prev = 'v0';
-      for (let i = 1; i < n; i++) {
-        const offset = (i * (clipDuration - FADE)).toFixed(2);
-        const next = i === n - 1 ? 'bg' : `xf${i}`;
-        filterParts.push(`[${prev}][v${i}]xfade=transition=fade:duration=${FADE}:offset=${offset}[${next}]`);
-        prev = next;
-      }
-    }
-
-    // 캐릭터 오버레이 → 자막
-    if (hasCharacter) {
-      filterParts.push(`[${charIdx}:v]scale=360:-1[char]`);
-      filterParts.push(`[bg][char]overlay=x=(W-w)/2:y=H-h-20[vchar]`);
-      filterParts.push(`[vchar]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`);
-    } else {
-      filterParts.push(`[bg]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`);
-    }
-
     execSync(
-      `ffmpeg -y ${inputParts.join(' ')} -filter_complex "${filterParts.join(';')}" ` +
-      `-map "[vout]" -map ${audioIdx}:a ` +
-      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k -shortest output.mp4`,
-      { stdio: 'inherit' }
-    );
-    clipPaths.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-
-  } else if (hasCharacter) {
-    // ── Pexels 실패 시 Ken Burns 폴백 ─────────────────────────
-    console.log('  → Ken Burns 폴백 (Pexels 실패)');
-    const totalFrames = Math.ceil(Math.min(audioDuration, 59) * 30) + 60;
-    execSync(
-      `ffmpeg -y -loop 1 -i character.png -i audio.mp3 ` +
-      `-vf "scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,` +
-      `zoompan=z='min(zoom+0.0003,1.2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${totalFrames}:s=1080x1920:fps=30,` +
-      `subtitles=${srtEscaped}:force_style='${subStyle}'" ` +
-      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k -shortest -t ${Math.min(audioDuration, 59)} output.mp4`,
+      `ffmpeg -y ` +
+      `-f lavfi -i color=c=0x111827:size=1080x1920:rate=30 ` +
+      `-loop 1 -i character.png ` +
+      `-i audio.mp3 ` +
+      `-filter_complex "${filterParts.join(';')}" ` +
+      `-map "[vout]" -map 2:a ` +
+      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k ` +
+      `-t ${videoDuration} output.mp4`,
       { stdio: 'inherit' }
     );
   } else {
-    throw new Error('Pexels 클립도 없고 캐릭터도 없음');
+    // 캐릭터 없을 시 텍스트만
+    execSync(
+      `ffmpeg -y ` +
+      `-f lavfi -i color=c=0x111827:size=1080x1920:rate=30 ` +
+      `-i audio.mp3 ` +
+      `-filter_complex "[0:v]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]" ` +
+      `-map "[vout]" -map 1:a ` +
+      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k ` +
+      `-t ${videoDuration} output.mp4`,
+      { stdio: 'inherit' }
+    );
   }
   console.log('✅ output.mp4 생성 완료 (9:16 세로형)');
 
@@ -411,7 +368,7 @@ asyncio.run(main())
 
   // ── 6. Instagram 릴스 + Facebook 릴스 + YouTube Shorts (병렬) ─
   console.log('\n📤 플랫폼 발행 중...');
-  const caption = `${scriptText.slice(0, 2100)}\n\n#Shorts #AI부업 #직장인 #자동화`;
+  const caption = `${scriptText.slice(0, 2100)}\n\n#Shorts #AI툴 #오늘의AI #새로운AI #AI추천`;
 
   const [igResult, fbResult, ytResult] = await Promise.allSettled([
     withRetry('Instagram 릴스', () => postInstagramReel(videoUrl, caption)),
@@ -420,7 +377,7 @@ asyncio.run(main())
       const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
       auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
       const youtube = google.youtube({ version: 'v3', auth });
-      const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '자동화']), 'Shorts', 'AI부업', '직장인'];
+      const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI', '인공지능'];
       const res = await youtube.videos.insert({
         part: ['snippet', 'status'],
         requestBody: {
@@ -446,7 +403,7 @@ asyncio.run(main())
   const ytStatus = ytResult.status === 'fulfilled' ? `✅ ${ytResult.value}` : `❌ ${ytResult.reason?.message?.slice(0, 60)}`;
 
   // ── 7. 임시 파일 정리 ─────────────────────────────────────────
-  ['character.png', 'audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'output.mp4'].forEach(f => {
+  ['character.png', 'audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'cards.srt', 'output.mp4'].forEach(f => {
     try { fs.unlinkSync(f); } catch {}
   });
 

@@ -49,6 +49,9 @@ jobs:
           SCRIPT_TEXT: ${{ github.event.client_payload.text || github.event.inputs.text }}
           SCRIPT_TITLE: ${{ github.event.client_payload.title || github.event.inputs.title }}
           SCRIPT_TAGS: ${{ github.event.client_payload.tags || github.event.inputs.tags }}
+          SCRIPT_TOOL_NAME: ${{ github.event.client_payload.tool_name || '' }}
+          SCRIPT_COMPARE: ${{ github.event.client_payload.compare_with || '' }}
+          SCRIPT_COMBO: ${{ github.event.client_payload.combo_tip || '' }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
