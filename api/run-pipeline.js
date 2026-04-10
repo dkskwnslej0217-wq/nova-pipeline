@@ -103,7 +103,7 @@ function formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTre
 
   const kwLine = keywords.split(',').map(k => `#${k.trim().replace(/\s/g,'')}`).join(' ');
 
-  return `🤖 <b>오늘의 AI 트렌드</b> — ${dateStr}(${dayStr})\n\n${sections || '오늘은 수집된 AI 트렌드가 없습니다.'}\n\n📌 <b>오늘 주목할 키워드</b>\n${kwLine}\n\n💡 이 트렌드로 만든 SNS 콘텐츠가 오늘 자동 발행됩니다\n<i>@nova_ai_kr · 매일 아침 자동 업데이트</i>`;
+  return `🤖 <b>오늘의 AI 트렌드</b> — ${dateStr}(${dayStr})\n\n${sections || '오늘은 수집된 AI 트렌드가 없습니다.'}\n\n📌 <b>오늘 주목할 키워드</b>\n${kwLine}\n\n🔧 오늘 소개할 새 AI 툴이 YouTube·Instagram에 자동 발행됩니다\n<i>@nova_ai_kr · 매일 새로운 AI 툴 소개</i>`;
 }
 
 // ─── 14a: YouTube TOP10 ───────────────────────────────────
@@ -231,20 +231,17 @@ async function fetchGitHubTrends() {
   return (data.items || []).map(r => `${r.name}: ${r.description || ''}`).slice(0, 5);
 }
 
-// ─── 14b: Gemini 키워드 추출 ─────────────────────────────
+// ─── 14b: 오늘의 AI 툴 선정 (Gemini) ────────────────────
 async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = [], phTrends = []) {
-  const trim = (arr, n = 3) => arr.slice(0, n).map(s => String(s).slice(0, 60));
-  const ytSection = titles?.length ? `[유튜브]\n${trim(titles).join('\n')}` : '';
-  const hnSection = hnTrends.length ? `[HN]\n${trim(hnTrends).join('\n')}` : '';
-  const ghSection = ghTrends.length ? `[GitHub]\n${trim(ghTrends).join('\n')}` : '';
-  const rdSection = redditTrends.length ? `[Reddit]\n${trim(redditTrends).join('\n')}` : '';
-  const igSection = igTop.length ? `[내 인스타]\n${trim(igTop).join('\n')}` : '';
-  const gtSection = googleTrends.length ? `[구글KR]\n${trim(googleTrends).join('\n')}` : '';
-  const phSection = phTrends.length ? `[PH AI신제품]\n${trim(phTrends).join('\n')}` : '';
-  const context = [ytSection, hnSection, ghSection, rdSection, igSection, gtSection, phSection].filter(Boolean).join('\n\n');
+  const trim = (arr, n = 5) => arr.slice(0, n).map(s => String(s).slice(0, 80));
+  const hnSection = hnTrends.length ? `[HackerNews]\n${trim(hnTrends).join('\n')}` : '';
+  const phSection = phTrends.length ? `[Product Hunt AI 신제품]\n${trim(phTrends).join('\n')}` : '';
+  const ghSection = ghTrends.length ? `[GitHub 트렌딩]\n${trim(ghTrends).join('\n')}` : '';
+  const rdSection = redditTrends.length ? `[Reddit r/artificial]\n${trim(redditTrends).join('\n')}` : '';
+  const context = [phSection, hnSection, ghSection, rdSection].filter(Boolean).join('\n\n');
 
   const ctx = getContentContext();
-  const prompt = `아래는 오늘의 글로벌/한국 AI·자동화 트렌드입니다:\n${context}\n\n${ctx.fullContext}\n\n위 시리즈·주제에 맞게 한국 직장인 타겟 SNS 콘텐츠에 활용할 핵심 키워드 5개 추출. 반드시 AI자동화/부업/월급외수익/직장인/시간절약 중심으로. 단어만, 쉼표 구분.`;
+  const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 조건: 실제로 사용 가능한 도구, 한국 사용자에게 유용한 것, 가능하면 무료/프리미엄 플랜 있는 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (30자 이내)|||누구에게 필요한지 (20자 이내)|||무료/유료/프리미엄\n\n예시:\nPerplexity AI|||실시간 검색 + AI 답변 통합 도구|||리서치하는 모든 사람|||무료`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
     {
@@ -279,58 +276,24 @@ function buildImagePromptFromKeywords(keywords) {
   return en.slice(0, 2).join(', ') + ', Korean aesthetic, modern minimalist, high quality, 4k, no text, no watermark';
 }
 
-// ─── 콘텐츠 컨텍스트 (요일 주제 + 월별 테마 + 시리즈 에피소드) ──
+// ─── 콘텐츠 컨텍스트 (요일별 AI 툴 카테고리) ─────────────
 function getContentContext() {
   const kst = new Date(Date.now() + 9 * 3600000);
-  const day   = kst.getDay();
-  const month = kst.getMonth() + 1;
-  const date  = kst.getDate();
+  const day  = kst.getDay();
 
-  const dayTopics = {
-    0: 'AI 미래 이야기 — 다음 주를 준비하는 직장인의 시선',
-    1: 'AI 툴 추천 — 지금 당장 업무에 쓸 수 있는 것',
-    2: '업무 자동화 팁 — 반복 업무 끊어내는 법',
-    3: '퇴근 후 부수입 — 현실적인 방법만',
-    4: '생산성 팁 — 같은 시간에 더 많이 끝내는 법',
-    5: '직장인 공감 — 나만 이런 거 아냐',
-    6: '이번 주 AI 핵심 정리 — 놓쳤으면 지금 봐',
+  const dayCategories = {
+    0: '이번 주 베스트 AI 툴 TOP3',
+    1: '생산성 AI 툴 — 업무 효율 올리는 것',
+    2: '글쓰기·번역 AI 툴',
+    3: '이미지·영상 생성 AI 툴',
+    4: '자동화·코딩 AI 툴',
+    5: '무료로 쓸 수 있는 AI 툴',
+    6: '이번 주 AI 뉴스 & 새 툴 총정리',
   };
 
-  const monthlyThemes = {
-    1:  '새해 목표 실현 — AI로 올해 달라지기',
-    2:  '절약·재테크 — 월급날 전에 챙기는 것',
-    3:  '봄 시작 — 이직·커리어 AI 활용',
-    4:  '연봉 협상 시즌 — AI로 준비하는 승급',
-    5:  '황금연휴·여행 — 부업으로 여행비 만들기',
-    6:  '상반기 회고 — AI로 점검하는 나',
-    7:  '여름·재택 — 자동화로 더 쉽게',
-    8:  '휴가 끝 복귀 — 자동화로 덜 힘들게',
-    9:  '하반기 시작 — AI 공부 시즌',
-    10: '연말 준비 — 연말정산·투자 점검',
-    11: '블랙프라이데이 — 무료 AI 툴 총정리',
-    12: '연말·한 해 마무리 — 내년 자동화 설계',
-  };
-
-  const seriesTopics = [
-    '', // 0 unused
-    '이메일 자동화',  '회의록 AI',      '보고서 초안',    '데이터 분석',
-    'ChatGPT 프롬프트', '노션 자동화',  '엑셀 AI',        '슬랙 자동화',
-    '채용공고 분석',  '자기소개서 AI',  '면접 준비 AI',   '연봉 협상 스크립트',
-    '업무 일정 자동화', '고객 응대 AI', '클레임 대응',    '기획서 AI',
-    'SNS 예약 자동화', '썸네일 AI',    '블로그 자동화',  '뉴스레터 AI',
-    '번역 자동화',    '노코드 앱 제작', 'AI 이미지 생성', '영상 편집 AI',
-    '부업 수익 계산', '세금 자동화',    '투자 AI 분석',   '절약 AI',
-    '건강 루틴 AI',   '독서 요약 AI',  '한 달 총정리',
-  ];
-
-  const episode = date <= 30 ? date : (date % 30 || 30);
   return {
-    dayTopic:      dayTopics[day],
-    monthlyTheme:  monthlyThemes[month],
-    episode,
-    seriesTopic:   seriesTopics[episode] || 'AI 자동화 팁',
-    // 콘텐츠 프롬프트에 쓸 한 줄 요약
-    fullContext: `[시리즈] 직장인 AI 30일 챌린지 Day ${episode}: ${seriesTopics[episode] || 'AI 자동화 팁'}\n[월별 테마] ${monthlyThemes[month]}\n[오늘 주제] ${dayTopics[day]}`,
+    dayCategory: dayCategories[day],
+    fullContext:  `[오늘 카테고리] ${dayCategories[day]}`,
   };
 }
 
@@ -404,14 +367,18 @@ YouTube Shorts 나레이션 작성:
 
 // ─── 14c: Groq 훅 초안 ───────────────────────────────────
 async function generateHooks(keywords) {
+  // keywords 형식: "툴이름|||설명|||대상|||무료/유료"
+  const parts = keywords.split('|||');
+  const toolName = parts[0]?.trim() || 'AI 툴';
+  const toolDesc = parts[1]?.trim() || '';
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       messages: [
-        { role: 'system', content: '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 없음. AI 티 절대 금지. 진짜 사람 말투. 한국어만.' },
-        { role: 'user', content: `키워드: ${keywords}\n\n첫 줄 훅 3개. 각 25자 이내. 번호 없이. 스크롤 멈추게 되는 문장으로. 오타 없이.` }
+        { role: 'system', content: '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. AI 티 없이 진짜 사람 말투. 한국어만.' },
+        { role: 'user', content: `오늘 소개할 AI 툴: ${toolName} — ${toolDesc}\n\n이 툴을 소개하는 첫 줄 훅 3개. 각 25자 이내. 번호 없이. "이거 알아?" "이미 쓰는 사람은 알지" 식으로 궁금증 유발. 오타 없이.` }
       ],
       max_tokens: 100,
     }),
@@ -423,10 +390,15 @@ async function generateHooks(keywords) {
 
 // ─── 14d: 최종 완성 (1번 Groq 호출 → 3개 플랫폼 동시 생성) ──
 async function finalizeContent(keywords, hooks) {
-  const type = getContentType();
+  // keywords 형식: "툴이름|||설명|||대상|||무료/유료"
+  const parts = keywords.split('|||');
+  const toolName   = parts[0]?.trim() || 'AI 툴';
+  const toolDesc   = parts[1]?.trim() || '';
+  const toolTarget = parts[2]?.trim() || '';
+  const toolPrice  = parts[3]?.trim() || '';
 
-  const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 절대 금지. 진짜 직장인 말투.';
-  const userMsg = `키워드: ${keywords}\n훅: ${hooks}\n타입: ${type.name} — ${type.hook}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 4개 작성:\n\n===IG===\n⚡ [훅 20자 이내]\n\n→ [팁]\n→ [팁]\n→ [팁]\n\n💾 [저장각 한 줄]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(공감 훅 + 스토리 3~4줄 + 댓글유도 질문, 이모지 1~2개, 180자 이내)\n\n===YT===\n(나레이션: 도입+팁 3~4문장+여운, 말하듯, 150자 이내)\n\n===IMG===\n(English only, 12 words max: describe a realistic photo scene that visually matches this post. Real person, modern Korean office or cafe, natural lighting, no text, no robot, no abstract art. Example: "young Korean professional working on laptop in bright modern cafe")`;
+  const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
+  const userMsg = `오늘 소개할 AI 툴: ${toolName}\n설명: ${toolDesc}\n대상: ${toolTarget}\n가격: ${toolPrice}\n훅 후보: ${hooks}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 4개 작성:\n\n===IG===\n🔧 [훅 20자 이내 — 툴 이름 또는 강렬한 첫 줄]\n\n• 이름: ${toolName}\n• [툴이 하는 것 한 줄]\n• [누구에게 필요한지 한 줄]\n• ${toolPrice}\n\n💡 [한 줄 평가 — "이미 쓰는 사람 있음" 식]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(툴 소개 + 어떤 상황에 쓰면 좋은지 스토리 3~4줄 + "써봤어?" 댓글유도, 이모지 1~2개, 180자 이내)\n\n===YT===\n(나레이션: "오늘 소개할 AI는 ${toolName}이야." 로 시작 → 뭐 하는 툴인지 → 누가 쓰면 좋은지 → 무료/유료 → 마무리 한 줄 여운. 말하듯 자연스럽게, 150자 이내)\n\n===IMG===\n(English only, 12 words max: realistic photo scene matching this AI tool introduction. Person using laptop or phone, modern setting, natural lighting, no text, no robot. Example: "young Korean person using AI app on laptop in minimalist office")`;
 
   async function callGroq() {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -571,13 +543,19 @@ export default async function handler(req, res) {
     ].filter(Boolean).join('\n\n');
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
 
-    // 14b Gemini
+    // 14b Gemini — 오늘의 AI 툴 선정
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? ['AI 자동화', '콘텐츠 수익화', '1인 창업'], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends);
+      keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends);
+      // 형식 검증: "툴이름|||설명|||대상|||가격" 형태인지 확인
+      if (!keywords.includes('|||')) {
+        // 폴백: phTrends 첫 번째 항목 사용
+        const fallbackTool = phTrends[0] || hnTrends[0] || 'Perplexity AI';
+        keywords = `${fallbackTool}|||AI 검색 및 리서치 도구|||리서치·공부하는 사람|||무료`;
+      }
     } catch(e) {
-      await tg(`⚠️ Gemini 실패 → 기본 키워드 사용\n${e.message}`);
-      keywords = 'AI자동화, 콘텐츠수익, 1인창업, SNS마케팅';
+      await tg(`⚠️ Gemini 실패 → 기본 툴 사용\n${e.message}`);
+      keywords = 'Perplexity AI|||실시간 검색 + AI 답변 통합|||리서치하는 모든 사람|||무료';
     }
 
     // 텔레그램 채널 발행 (트렌드 다이제스트)
@@ -594,13 +572,13 @@ export default async function handler(req, res) {
     const fbFinal = filterKoreanOnly(fbText);
     const ytFinal = filterKoreanOnly(ytText);
 
-    // Supabase 저장
-    const topic = keywords.split(',')[0].trim();
-    await saveToSupabase(topic, igFinal);
-
     // 플랫폼별 콘텐츠
-    const fixedTags = '#AI부업 #직장인부업 #자동화 #월급외수익 #AI자동화 #부업추천 #재테크 #디지털노마드';
-    const keywordTags = keywords.split(',').map(k => `#${k.trim().replace(/\s/g, '')}`).join(' ');
+    const toolName = keywords.split('|||')[0]?.trim() || 'AI툴';
+
+    // Supabase 저장
+    await saveToSupabase(toolName, igFinal);
+    const fixedTags = '#AI툴 #인공지능 #새로운AI #AI추천 #생산성앱 #무료AI #AI소개 #테크';
+    const keywordTags = `#${toolName.replace(/\s/g, '')} #오늘의AI`;
     const hashtagList = `${keywordTags} ${fixedTags}`;
     const igContent = `${igFinal}\n\n${hashtagList}`.slice(0, 2200);  // Instagram: 본문 + 해시태그
     const fbContent = fbFinal;                                          // Facebook: 본문만
@@ -632,11 +610,8 @@ export default async function handler(req, res) {
             event_type: 'create-video',
             client_payload: {
               text: ytFinal.slice(0, 2500),
-              title: (() => {
-                const ctx = getContentContext();
-                return `직장인 AI Day ${ctx.episode} — ${ctx.seriesTopic}`;
-              })(),
-              tags: keywords.split(',').map(k => k.trim()).join(','),
+              title: `오늘의 AI 툴: ${toolName}`,
+              tags: keywords.split('|||').slice(0, 2).map(k => k.trim()).join(', '),
             },
           }),
         }
