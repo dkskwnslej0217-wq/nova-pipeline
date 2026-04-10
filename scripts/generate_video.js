@@ -115,36 +115,15 @@ async function downloadClip(query, index, fallbackIdx = 0) {
   return `clip_${index}.mp4`;
 }
 
-// ── 카카오프렌즈 스타일 캐릭터 생성 (Pollinations, 고정 seed) ────────
+// ── NOVA 캐릭터 (번들 고정 이미지 우선, 없으면 Pexels 폴백) ─────────
 async function generateCharacterImage() {
-  const prompt = [
-    'cute 2D cartoon character, round chubby face, big sparkly eyes,',
-    'simple short hair, kakao friends style, flat illustration,',
-    'pastel mint green background, kawaii, holding smartphone smiling,',
-    'full body, white outline, clean vector art, no text, no watermark',
-  ].join(' ');
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&seed=7777&model=flux&nologo=true`;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 50000);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) {
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > 10000) {
-          fs.writeFileSync('character.png', buf);
-          console.log('✅ 캐릭터 이미지 생성 완료');
-          return true;
-        }
-      }
-    } catch (e) {
-      console.warn(`⚠️ 캐릭터 생성 재시도 (${attempt + 1}/3): ${e.message}`);
-    }
-    await new Promise(r => setTimeout(r, 5000));
+  const bundled = path.join(path.dirname(new URL(import.meta.url).pathname), 'nova_character.png');
+  if (fs.existsSync(bundled)) {
+    fs.copyFileSync(bundled, 'character.png');
+    console.log('✅ 번들 캐릭터 사용 (nova_B)');
+    return true;
   }
-  console.warn('⚠️ 캐릭터 생성 실패 — Pexels 폴백 사용');
+  console.warn('⚠️ nova_character.png 없음 — Pexels 폴백 사용');
   return false;
 }
 
@@ -307,26 +286,27 @@ asyncio.run(main())
   console.log('✅ subtitles.srt 저장');
   const srtEscaped = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-  // 자막 스타일 (9:16 세로형 최적화)
+  // 자막 스타일 (하단 중앙, 작게)
   const subStyle = [
-    'FontName=NanumGothic', 'FontSize=22', 'Bold=1',
+    'FontName=NanumGothic', 'FontSize=16', 'Bold=1',
     'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
     'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=2', 'MarginV=120',
+    'BorderStyle=3', 'Alignment=2', 'MarginV=60',
   ].join(',');
 
   // ── 3 & 4. 영상 합성 (캐릭터 or Pexels 폴백) ─────────────────
   console.log('\n🎬 영상 합성 중...');
 
   if (hasCharacter) {
-    // ── 캐릭터 배경 방식 (9:16 세로형 Shorts) ──────────────────
-    console.log('  → 캐릭터 배경 모드');
+    // ── 캐릭터 배경 모드 (Ken Burns 줌인 효과) ──────────────────
+    console.log('  → 캐릭터 Ken Burns 모드');
+    const totalFrames = Math.ceil(Math.min(audioDuration, 59) * 30) + 60;
     execSync(
       `ffmpeg -y -loop 1 -i character.png -i audio.mp3 ` +
-      `-vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+      `-vf "scale=1350:2400:force_original_aspect_ratio=increase,crop=1350:2400,` +
+      `zoompan=z='min(zoom+0.0003,1.2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${totalFrames}:s=1080x1920:fps=30,` +
       `subtitles=${srtEscaped}:force_style='${subStyle}'" ` +
-      `-c:v libx264 -preset fast -crf 20 -tune stillimage ` +
-      `-c:a aac -b:a 192k -shortest -t ${Math.min(audioDuration, 59)} output.mp4`,
+      `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k -shortest -t ${Math.min(audioDuration, 59)} output.mp4`,
       { stdio: 'inherit' }
     );
   } else {
