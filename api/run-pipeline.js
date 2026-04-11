@@ -477,6 +477,32 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // ── 중복 실행 방지: 30분 내 재실행 차단 ──────────────────
+  const LOCK_HASH = 'pipeline_run_lock';
+  const COOLDOWN_MS = 30 * 60 * 1000;
+  try {
+    const lockRes = await fetch(
+      `${SUPA_URL}/rest/v1/cache?hash=eq.${LOCK_HASH}&select=score`,
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
+    );
+    const lockData = await lockRes.json();
+    const lastRun = lockData[0]?.score;
+    if (lastRun && (Date.now() - lastRun) < COOLDOWN_MS) {
+      const minAgo = Math.round((Date.now() - lastRun) / 60000);
+      console.log(`⏭️ 파이프라인 스킵 — ${minAgo}분 전 실행됨`);
+      return res.status(200).json({ ok: false, skipped: true, reason: `${minAgo}분 전 이미 실행` });
+    }
+    // 락 갱신 (upsert)
+    await fetch(`${SUPA_URL}/rest/v1/cache`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`,
+        'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ hash: LOCK_HASH, topic: '__lock__', content: 'pipeline_lock', score: Date.now() }),
+    });
+  } catch { /* 락 체크 실패 시 계속 진행 */ }
+
   // 매일 → daily_count 리셋 / 매월 1일 → monthly_count 추가 리셋
   const today = new Date();
   try {
