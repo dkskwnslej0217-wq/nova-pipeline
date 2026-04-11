@@ -32,8 +32,31 @@ async function getIGInsights(token, accountId) {
     if (!posts.length) return null;
     const totalLikes = posts.reduce((s, p) => s + (p.like_count || 0), 0);
     const totalComments = posts.reduce((s, p) => s + (p.comments_count || 0), 0);
-    return { postCount: posts.length, totalLikes, totalComments, avgLikes: Math.round(totalLikes / posts.length) };
+    return { posts, postCount: posts.length, totalLikes, totalComments, avgLikes: Math.round(totalLikes / posts.length) };
   } catch { return null; }
+}
+
+// 게시물별 성과 Supabase 저장 (누적 데이터)
+async function saveIGPerformance(posts) {
+  if (!posts?.length) return;
+  for (const p of posts) {
+    try {
+      await fetch(`${SUPA_URL}/rest/v1/cache`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          hash: `ig_${p.id}`,
+          topic: `ig_post_${p.timestamp?.slice(0, 10)}`,
+          content: `좋아요:${p.like_count || 0} 댓글:${p.comments_count || 0}`,
+          score: p.like_count || 0,
+        }),
+      });
+    } catch { /* 저장 실패는 무시 */ }
+  }
 }
 
 async function generateReport(name, niche, stats) {
@@ -67,6 +90,7 @@ export default async function handler(req, res) {
 
   // 관리자 본인 리포트
   const myStats = await getIGInsights(IG_TOKEN, IG_ACCOUNT_ID);
+  if (myStats?.posts) await saveIGPerformance(myStats.posts); // 성과 누적 저장
   const myReport = await generateReport('NOVA', 'AI부업 자동화', myStats);
 
   let summary = `📊 주간 리포트 (${weekStr})\n\n🏠 내 계정\n${myReport}`;
