@@ -647,6 +647,7 @@ export default async function handler(req, res) {
               tool_name:    toolName,
               compare_with: keywords.split('|||')[4]?.trim() || '',
               combo_tip:    comboText || '',
+              tool_url:     `https://www.${toolName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.ai`,
             },
           }),
         }

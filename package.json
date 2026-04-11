@@ -4,7 +4,8 @@
     "googleapis": "^171.4.0",
     "@anthropic-ai/claude-agent-sdk": "latest",
     "@supabase/supabase-js": "^2.49.4",
-    "canvas": "^3.2.3"
+    "canvas": "^3.2.3",
+    "puppeteer": "^22.0.0"
   },
   "scripts": {
     "test": "node test_pipeline.js"

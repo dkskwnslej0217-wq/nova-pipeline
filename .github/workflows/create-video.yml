@@ -41,7 +41,8 @@ jobs:
           sudo apt-get install -y \
             ffmpeg libass-dev fonts-nanum fonts-nanum-extra python3-pip \
             libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
-            build-essential pkg-config
+            build-essential pkg-config \
+            chromium-browser
           pip3 install edge-tts --quiet
           fc-cache -fv
           ffmpeg -filters 2>/dev/null | grep -i subtitles || echo "⚠️ subtitles 필터 없음"
@@ -56,6 +57,7 @@ jobs:
           SCRIPT_TOOL_NAME: ${{ github.event.client_payload.tool_name || '' }}
           SCRIPT_COMPARE: ${{ github.event.client_payload.compare_with || '' }}
           SCRIPT_COMBO: ${{ github.event.client_payload.combo_tip || '' }}
+          SCRIPT_TOOL_URL: ${{ github.event.client_payload.tool_url || '' }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
