@@ -399,7 +399,7 @@ async function finalizeContent(keywords, hooks) {
   const compareWith = parts[4]?.trim() || 'ChatGPT';
 
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
-  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}\n훅 후보: ${hooks}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 6개 작성:\n\n===IG===\n🔧 [훅 20자 — "${compareWith} 쓰는 사람 주목" 식]\n\n• ${toolName}: [핵심 기능 한 줄]\n• ${compareWith}보다 나은 점: [한 줄]\n• ${compareWith}이 더 나은 점: [한 줄]\n\n💡 [조합 팁 한 줄 — "이 두 개 같이 쓰면" 식]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(아침 브리핑 형식: "오늘 새로 나온 ${toolName}" → ${compareWith}랑 뭐가 다른지 → 어떤 상황에 쓰면 좋은지 → "써봤어?" 댓글유도. 이모지 2~3개, 200자 이내)\n\n===YT===\n(나레이션 45초 분량: "${compareWith} 쓰는 사람, 이거 알아?" 로 시작 → ${toolName} 한 줄 소개 → ${compareWith}랑 비교 장단점 → 조합 쓰는 법 → 마무리 한 줄. 말하듯 자연스럽게, 200자 이내)\n\n===IMG===\n(English only, 12 words max: realistic photo, person using laptop/phone, modern setting, natural light, no text)\n\n===COMPARE===\n(딱 1줄: vs ${compareWith} ✅ ${toolName} 장점 한 가지 ❌ ${toolName} 단점 한 가지, 30자 이내)\n\n===COMBO===\n(딱 1줄: ${toolName}은 [상황]에, ${compareWith}은 [상황]에 써, 25자 이내)`;
+  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}\n훅 후보: ${hooks}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 6개 작성:\n\n===IG===\n🔧 [훅 20자 — "${compareWith} 쓰는 사람 주목" 식]\n\n• ${toolName}: [핵심 기능 한 줄]\n• ${compareWith}보다 나은 점: [한 줄]\n• ${compareWith}이 더 나은 점: [한 줄]\n\n💡 [조합 팁 한 줄 — "이 두 개 같이 쓰면" 식]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(아침 브리핑 형식: "오늘 새로 나온 ${toolName}" → ${compareWith}랑 뭐가 다른지 → 어떤 상황에 쓰면 좋은지 → "써봤어?" 댓글유도. 이모지 2~3개, 200자 이내)\n\n===YT===\n(나레이션 60초 분량. 아래 순서 지켜서 작성:\n1. 후킹 — "${compareWith} 쓰는 사람 이거 알아?" 식으로 시작. 1~2문장.\n2. 툴 소개 — ${toolName}이 정확히 뭘 하는 도구인지. 추상적 금지, 구체적 기능 1개 콕 집어서.\n3. 진짜 장점 — ${compareWith}랑 비교해서 ${toolName}이 확실히 나은 점 1가지. 이유까지.\n4. 진짜 단점 — 솔직하게. ${toolName}이 ${compareWith}보다 부족한 점 1가지. 숨기지 말고.\n5. 이런 사람한테 딱 — 어떤 상황, 어떤 사람에게 맞는지 구체적으로.\n6. 마무리 — 구독 유도 1문장.\n말하듯 자연스럽게. 350자~450자.)\n\n===IMG===\n(English only, 12 words max: realistic photo, person using laptop/phone, modern setting, natural light, no text)\n\n===COMPARE===\n(딱 1줄: vs ${compareWith} ✅ ${toolName} 장점 한 가지 ❌ ${toolName} 단점 한 가지, 30자 이내)\n\n===COMBO===\n(딱 1줄: ${toolName}은 [상황]에, ${compareWith}은 [상황]에 써, 25자 이내)`;
 
   async function callGroq() {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -408,7 +408,7 @@ async function finalizeContent(keywords, hooks) {
       body: JSON.stringify({
         model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }],
-        max_tokens: 600,
+        max_tokens: 900,
         temperature: 0.8,
       }),
     });
@@ -420,7 +420,7 @@ async function finalizeContent(keywords, hooks) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
     });
     if (!r.ok) throw new Error(`Claude ${r.status}`);
     return (await r.json()).content[0].text;
