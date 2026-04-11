@@ -248,7 +248,7 @@ async function fetchRecentTopics() {
 }
 
 // ─── 14b: 오늘의 AI 툴 선정 (Gemini) ────────────────────
-async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = [], phTrends = [], recentTopics = []) {
+async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = [], phTrends = [], recentTopics = [], topScored = []) {
   const trim = (arr, n = 5) => arr.slice(0, n).map(s => String(s).slice(0, 80));
   const hnSection = hnTrends.length ? `[HackerNews]\n${trim(hnTrends).join('\n')}` : '';
   const phSection = phTrends.length ? `[Product Hunt AI 신제품]\n${trim(phTrends).join('\n')}` : '';
@@ -260,7 +260,10 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
   const memorySection = recentTopics.length
     ? `\n\n⛔ 최근 7일 이미 소개한 툴 (중복 금지):\n${recentTopics.map(t => `• ${t}`).join('\n')}`
     : '';
-  const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}${memorySection}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 실제로 사용 가능하고 한국 사용자에게 유용한 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (25자 이내)|||대상 (15자 이내)|||무료/유료/프리미엄|||비교할 대형 툴 1개 이름만 (ChatGPT/Notion/Canva/Figma/Google/YouTube 중 가장 비슷한 것)\n\n예시:\nPerplexity AI|||AI가 출처 포함해서 검색해주는 도구|||리서치하는 사람|||무료|||ChatGPT`;
+  const learningSection = topScored.length
+    ? `\n\n✅ 최근 반응 좋았던 주제 유형 (이런 방향으로 선정):\n${topScored.map(t => `• ${t}`).join('\n')}`
+    : '';
+  const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}${memorySection}${learningSection}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 실제로 사용 가능하고 한국 사용자에게 유용한 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (25자 이내)|||대상 (15자 이내)|||무료/유료/프리미엄|||비교할 대형 툴 1개 이름만 (ChatGPT/Notion/Canva/Figma/Google/YouTube 중 가장 비슷한 것)\n\n예시:\nPerplexity AI|||AI가 출처 포함해서 검색해주는 도구|||리서치하는 사람|||무료|||ChatGPT`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
     {
@@ -700,7 +703,7 @@ export default async function handler(req, res) {
     // 14b Gemini — 오늘의 AI 툴 선정
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent);
+      keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored);
       // 형식 검증: "툴이름|||설명|||대상|||가격" 형태인지 확인
       if (!keywords.includes('|||')) {
         // 폴백: phTrends 첫 번째 항목 사용
