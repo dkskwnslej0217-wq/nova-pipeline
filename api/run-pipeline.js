@@ -399,7 +399,41 @@ async function finalizeContent(keywords, hooks) {
   const compareWith = parts[4]?.trim() || 'ChatGPT';
 
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
-  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}\n훅 후보: ${hooks}\n금지: "안녕하세요" "여러분" "오늘은" "~요" "~습니다" "확실히" "물론"\n\n아래 구분자 그대로 6개 작성:\n\n===IG===\n🔧 [훅 20자 — "${compareWith} 쓰는 사람 주목" 식]\n\n• ${toolName}: [핵심 기능 한 줄]\n• ${compareWith}보다 나은 점: [한 줄]\n• ${compareWith}이 더 나은 점: [한 줄]\n\n💡 [조합 팁 한 줄 — "이 두 개 같이 쓰면" 식]\n(150자 이내, 해시태그 없이)\n\n===FB===\n(아침 브리핑 형식: "오늘 새로 나온 ${toolName}" → ${compareWith}랑 뭐가 다른지 → 어떤 상황에 쓰면 좋은지 → "써봤어?" 댓글유도. 이모지 2~3개, 200자 이내)\n\n===YT===\n(나레이션 60초 분량. 아래 순서 지켜서 작성:\n1. 후킹 — "${compareWith} 쓰는 사람 이거 알아?" 식으로 시작. 1~2문장.\n2. 툴 소개 — ${toolName}이 정확히 뭘 하는 도구인지. 추상적 금지, 구체적 기능 1개 콕 집어서.\n3. 진짜 장점 — ${compareWith}랑 비교해서 ${toolName}이 확실히 나은 점 1가지. 이유까지.\n4. 진짜 단점 — 솔직하게. ${toolName}이 ${compareWith}보다 부족한 점 1가지. 숨기지 말고.\n5. 이런 사람한테 딱 — 어떤 상황, 어떤 사람에게 맞는지 구체적으로.\n6. 마무리 — 구독 유도 1문장.\n말하듯 자연스럽게. 350자~450자.)\n\n===IMG===\n(English only, 12 words max: realistic photo, person using laptop/phone, modern setting, natural light, no text)\n\n===COMPARE===\n(딱 1줄: vs ${compareWith} ✅ ${toolName} 장점 한 가지 ❌ ${toolName} 단점 한 가지, 30자 이내)\n\n===COMBO===\n(딱 1줄: ${toolName}은 [상황]에, ${compareWith}은 [상황]에 써, 25자 이내)`;
+  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}
+금지어: "안녕하세요" "여러분" "오늘은" "확실히" "물론" "정말"
+
+아래 구분자 그대로 작성:
+
+===IG===
+(인스타 캐러셀 7장. [S번호] 형식. 한국어만. 해시태그 없이.)
+[S1] ${toolName} — [한 줄 핵심 설명, 20자]
+[S2] [${compareWith} 쓸 때 이런 불편 있죠? 공감 문제, 40자]
+[S3] [핵심 기능 1개 + 구체적 설명 — "이걸 하면 ~가 가능해요", 45자]
+[S4] [장점 — 구체적 상황 포함 "~할 때 ~해서 좋아요", 45자]
+[S5] [단점 솔직하게 — "단점은 ~, 이런 사람은 ${compareWith}가 나을 수 있어요", 45자]
+[S6] [추천: 이런 사람 / 비추천: 이런 사람, 40자]
+[S7] 지금 무료로 시작 가능 → 링크는 바이오 참고 🔗
+
+===FB===
+(${toolName} 소개 게시글. ${compareWith}랑 뭐가 다른지 + 어떤 상황에 쓰면 좋은지 + 공식 링크 포함 + "써봤어?" 댓글유도. 이모지 2개, 200자 이내.)
+
+===YT===
+(나레이션 60초. 말하듯 자연스럽게. 350~450자.
+1. 후킹 — ${compareWith} 쓸 때 겪는 구체적 불편함. 공감 유도.
+2. 소개 — ${toolName}이 정확히 뭘 하는지. 기능 1개 콕 집어서 예시 포함.
+3. 장점 — ${compareWith}보다 나은 점. 이유 + 구체적 사용 상황.
+4. 단점 — 솔직하게. ${toolName}이 부족한 점 1가지. 숨기지 말것.
+5. 추천 대상 — "이런 분한테 딱이에요" 구체적으로.
+6. CTA — 구독 + 알림 설정. 1문장.)
+
+===IMG===
+(English only, 12 words max: realistic photo, person using laptop/phone, modern setting, natural light, no text)
+
+===COMPARE===
+(딱 1줄: vs ${compareWith} ✅ ${toolName} 장점 ❌ ${toolName} 단점, 30자 이내)
+
+===COMBO===
+(딱 1줄: ${toolName}은 [상황]에, ${compareWith}은 [상황]에, 25자 이내)`;
 
   async function callGroq() {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -448,8 +482,71 @@ async function finalizeContent(keywords, hooks) {
 }
 
 
+// ─── 콘텐츠 품질 채점 (규칙 기반, AI 호출 없음) ──────────
+const EMOTION_WORDS = ['충격', '반전', '실화', '경고', '주의', '놀라운', '무료', '비밀', '진짜', '드디어', '한방에', '완전'];
+const TREND_WORDS   = ['ai', 'gpt', '자동화', '챗봇', '무료', '신기술', '트렌드', '핫한', '요즘', '최신'];
+const CTA_WORDS     = ['저장', '공유', '팔로우', '구독', '알림', '댓글', '링크', '클릭', '지금', '시작'];
+
+function scoreContent(igText, keywords) {
+  let score = 0;
+  const lines = igText.split('\n').filter(Boolean);
+  const firstLine = lines[0] || '';
+  const full = igText.toLowerCase();
+
+  // ── 제목 (25점) ──────────────────────────────────────────
+  if (/\d/.test(firstLine))                                    score += 5; // 숫자 포함
+  if (EMOTION_WORDS.some(w => firstLine.includes(w)))         score += 5; // 감정단어
+  if (firstLine.length <= 30)                                  score += 5; // 간결함 (한국어 기준 30자)
+  if (/[?！!]/.test(firstLine) || firstLine.includes('이유')) score += 5; // 궁금증 유발
+  const toolName = (keywords.split('|||')[0] || '').toLowerCase().trim();
+  if (toolName && full.includes(toolName))                     score += 5; // 키워드 포함
+
+  // ── 본문 구조 (25점) ─────────────────────────────────────
+  if (firstLine.length >= 10)                                  score += 10; // 첫 문장 존재
+  if (lines.length >= 4)                                       score += 5;  // 기승전결 구조
+  const longLines = lines.filter(l => l.length > 80).length;
+  if (longLines === 0)                                         score += 5;  // 문단 짧게
+  if (CTA_WORDS.some(w => full.includes(w)))                  score += 5;  // CTA 포함
+
+  // ── 플랫폼 최적화 (25점) ─────────────────────────────────
+  const hashCount = (igText.match(/#\S+/g) || []).length;
+  if (hashCount >= 5 && hashCount <= 15)                       score += 10; // 해시태그 적정량
+  if (igText.length >= 100 && igText.length <= 2200)          score += 10; // 길이 적정
+  if (/[\u{1F300}-\u{1FFFF}]/u.test(igText))                  score += 5;  // 이모지 있음
+
+  // ── 차별화 (25점) ────────────────────────────────────────
+  if (TREND_WORDS.some(w => full.includes(w)))                score += 10; // 트렌드 키워드
+  if (lines.length >= 5)                                       score += 10; // 충분한 내용
+  if (!igText.includes('안녕하세요') && !igText.includes('여러분')) score += 5; // AI 티 없음
+
+  return Math.min(score, 100);
+}
+
+// 약점 자동 보완 (70~89점 구간)
+function patchContent(igText, score) {
+  let patched = igText;
+
+  // 이모지 없으면 추가
+  if (!/[\u{1F300}-\u{1FFFF}]/u.test(patched)) {
+    patched = '✅ ' + patched;
+  }
+  // CTA 없으면 추가
+  const hasCTA = CTA_WORDS.some(w => patched.toLowerCase().includes(w));
+  if (!hasCTA) {
+    patched += '\n\n💡 저장해두면 나중에 유용해요!';
+  }
+  // 첫 줄이 너무 길면 자르기
+  const lines = patched.split('\n');
+  if (lines[0] && lines[0].length > 40) {
+    lines[0] = lines[0].slice(0, 37) + '...';
+    patched = lines.join('\n');
+  }
+
+  return patched;
+}
+
 // ─── Supabase 저장 ────────────────────────────────────────
-async function saveToSupabase(topic, content) {
+async function saveToSupabase(topic, content, qualityScore = 1) {
   try {
     await fetch(`${SUPA_URL}/rest/v1/cache`, {
       method: 'POST',
@@ -462,7 +559,7 @@ async function saveToSupabase(topic, content) {
         hash: `${btoa(encodeURIComponent(topic)).slice(0, 24)}_${Date.now()}`,
         topic,
         content: content.slice(0, 1000),
-        score: 1,
+        score: qualityScore,
       }),
     });
   } catch { /* 저장 실패는 파이프라인 중단하지 않음 */ }
@@ -477,31 +574,32 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // ── 중복 실행 방지: 30분 내 재실행 차단 ──────────────────
-  const LOCK_HASH = 'pipeline_run_lock';
-  const COOLDOWN_MS = 30 * 60 * 1000;
+  // ── 중복 실행 방지: 시간대별 원자적 락 ──────────────────
+  // KST 기준 시간대 키 (1시간 단위) → 같은 시간대 중복 실행 원천 차단
+  const kstNow = new Date(Date.now() + 9 * 3600000);
+  const lockKey = `lock_${kstNow.toISOString().slice(0, 13).replace('T', '_')}KST`;
+  // ignore-duplicates: 이미 같은 hash 있으면 INSERT 무시 → 빈 배열 반환 (원자적)
+  let lockInserted;
   try {
-    const lockRes = await fetch(
-      `${SUPA_URL}/rest/v1/cache?hash=eq.${LOCK_HASH}&select=score`,
-      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
-    );
-    const lockData = await lockRes.json();
-    const lastRun = lockData[0]?.score;
-    if (lastRun && (Date.now() - lastRun) < COOLDOWN_MS) {
-      const minAgo = Math.round((Date.now() - lastRun) / 60000);
-      console.log(`⏭️ 파이프라인 스킵 — ${minAgo}분 전 실행됨`);
-      return res.status(200).json({ ok: false, skipped: true, reason: `${minAgo}분 전 이미 실행` });
-    }
-    // 락 갱신 (upsert)
-    await fetch(`${SUPA_URL}/rest/v1/cache`, {
+    const lockRes = await fetch(`${SUPA_URL}/rest/v1/cache`, {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`,
-        'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation,resolution=ignore-duplicates',
       },
-      body: JSON.stringify({ hash: LOCK_HASH, topic: '__lock__', content: 'pipeline_lock', score: Date.now() }),
+      body: JSON.stringify({ hash: lockKey, topic: '__lock__', content: 'running', score: Date.now() }),
     });
-  } catch { /* 락 체크 실패 시 계속 진행 */ }
+    lockInserted = await lockRes.json();
+  } catch(e) {
+    // Supabase 접근 불가 → 안전하게 중단 (계속 진행 금지)
+    console.error('락 체크 실패 — 파이프라인 중단:', e.message);
+    return res.status(503).json({ ok: false, error: '락 체크 실패 — 재시도 금지' });
+  }
+  if (!Array.isArray(lockInserted) || lockInserted.length === 0) {
+    console.log(`⏭️ 파이프라인 스킵 — ${lockKey} 이미 실행됨`);
+    return res.status(200).json({ ok: false, skipped: true, reason: '이 시간대 이미 실행됨' });
+  }
 
   // 매일 → daily_count 리셋 / 매월 1일 → monthly_count 추가 리셋
   const today = new Date();
@@ -550,6 +648,10 @@ export default async function handler(req, res) {
       await tg(`⚠️ ${platform.toUpperCase()} 토큰 만료 ${daysLeft}일 전! 지금 갱신하세요.`);
     }
   }
+
+  // Make.com 재시도 방지: 락 통과 직후 즉시 202 응답 (타임아웃 전에)
+  // Vercel 서버리스는 응답 후에도 함수 계속 실행됨 (최대 300초)
+  res.status(202).json({ ok: true, started: true, lock: lockKey });
 
   const startMs = Date.now();
   let igStatus = '❌', fbStatus = '❌', videoStatus = '❌';
@@ -600,15 +702,27 @@ export default async function handler(req, res) {
 
     // 14d 콘텐츠 생성 (플랫폼별)
     const { igText, fbText, ytText, imagePrompt: groqImagePrompt, compareText, comboText } = await finalizeContent(keywords, hooks);
-    const igFinal = filterKoreanOnly(igText);
+    const igRaw  = filterKoreanOnly(igText);
     const fbFinal = filterKoreanOnly(fbText);
     const ytFinal = filterKoreanOnly(ytText);
 
-    // 플랫폼별 콘텐츠
+    // ── 품질 채점 ───────────────────────────────────────────
     const toolName = keywords.split('|||')[0]?.trim() || 'AI툴';
+    let igFinal = igRaw;
+    const qualityScore = scoreContent(igRaw, keywords);
 
-    // Supabase 저장
-    await saveToSupabase(toolName, igFinal);
+    if (qualityScore >= 90) {
+      // 즉시 발행
+    } else if (qualityScore >= 70) {
+      // 약점 자동 보완
+      igFinal = patchContent(igRaw, qualityScore);
+    } else {
+      // 품질 낮음 — 텔레그램 알림 + 그래도 발행 (Groq 호출 한도로 재생성 불가)
+      await tg(`⚠️ 품질 낮음 (${qualityScore}점) — 수동 확인 권장\n📌 ${toolName}`);
+    }
+
+    // Supabase 저장 (실제 품질점수 기록)
+    await saveToSupabase(toolName, igFinal, qualityScore);
     const fixedTags = '#AI툴 #인공지능 #새로운AI #AI추천 #생산성앱 #무료AI #AI소개 #테크';
     const keywordTags = `#${toolName.replace(/\s/g, '')} #오늘의AI`;
     const hashtagList = `${keywordTags} ${fixedTags}`;
@@ -648,6 +762,7 @@ export default async function handler(req, res) {
               compare_with: keywords.split('|||')[4]?.trim() || '',
               combo_tip:    comboText || '',
               tool_url:     `https://www.${toolName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.ai`,
+              ig_slides:    igText || '',
             },
           }),
         }
@@ -693,10 +808,11 @@ export default async function handler(req, res) {
       `⏱️ ${elapsed}초`
     );
 
-    return res.status(200).json({ ok: true, topic, keywords });
+    // 응답은 이미 위에서 보냄 (202) — 여기서 추가 응답 없음
 
   } catch(e) {
+    // 응답은 이미 보낸 후라 HTTP 응답 불가 → 텔레그램으로만 알림
     await tg(`❌ NOVA 파이프라인 실패\n${e.message}`);
-    return res.status(500).json({ ok: false, error: e.message });
+    console.error('파이프라인 오류:', e.message);
   }
 }
