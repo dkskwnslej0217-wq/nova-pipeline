@@ -4,8 +4,13 @@
     "googleapis": "^171.4.0",
     "@anthropic-ai/claude-agent-sdk": "latest",
     "@supabase/supabase-js": "^2.49.4",
-    "canvas": "^3.2.3",
-    "puppeteer": "^22.0.0"
+    "puppeteer": "^22.0.0",
+    "remotion": "^4.0.0",
+    "@remotion/cli": "^4.0.0",
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
   },
   "scripts": {
     "test": "node test_pipeline.js"

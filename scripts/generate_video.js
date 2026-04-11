@@ -1,10 +1,9 @@
-// scripts/generate_video.js — NOVA 영상 파이프라인 v5
-// 슬라이드 스타일 (canvas + Puppeteer 스크린샷) → ffmpeg 슬라이드쇼 → Supabase → IG/FB/YT
+// scripts/generate_video.js — NOVA 영상 파이프라인 v6
+// Remotion 애니메이션 영상 → ffmpeg 오디오 합성 → Supabase → IG/FB/YT
 
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { createCanvas, loadImage, registerFont } from 'canvas';
 import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
 
@@ -18,23 +17,15 @@ const {
   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
 } = process.env;
 
-// ── 상수 ──────────────────────────────────────────────────────────
-const W = 1080, H = 1920, PAD = 80;
-
-// 다크 테마 팔레트
-const C = {
-  bg:       '#0d1117',
-  card:     '#161b22',
-  border:   '#30363d',
-  cyan:     '#20B8CD',
-  green:    '#3fb950',
-  blue:     '#58a6ff',
-  purple:   '#bc8cff',
-  red:      '#f85149',
-  textPri:  '#e6edf3',
-  textSec:  '#8b949e',
-  textMute: '#484f58',
-};
+// ── Chromium 경로 탐색 ────────────────────────────────────────────
+function findChromium() {
+  const candidates = [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
+  ];
+  return candidates.find(p => fs.existsSync(p)) || '';
+}
 
 // ── 자동 재시도 ────────────────────────────────────────────────────
 async function withRetry(label, fn, retries = 2, delayMs = 6000) {
@@ -140,392 +131,57 @@ function generateSRT(text) {
   return srt;
 }
 
-// ── 폰트 등록 ─────────────────────────────────────────────────────
-function setupFonts() {
-  const candidates = [
-    ['/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf', { family: 'KorFont', weight: 'bold' }],
-    ['/usr/share/fonts/truetype/nanum/NanumGothic.ttf',     { family: 'KorFont' }],
-    ['/usr/share/fonts/opentype/nanum/NanumGothicBold.ttf', { family: 'KorFont', weight: 'bold' }],
-    ['/usr/share/fonts/opentype/nanum/NanumGothic.ttf',     { family: 'KorFont' }],
-  ];
-  let loaded = 0;
-  for (const [fp, opts] of candidates) {
-    if (fs.existsSync(fp)) {
-      try { registerFont(fp, opts); loaded++; } catch {}
-    }
-  }
-  const family = loaded > 0 ? 'KorFont' : 'sans-serif';
-  console.log(loaded > 0 ? `✅ 폰트 등록 (${loaded}개): KorFont` : '⚠️ 폰트 없음 — sans-serif 사용');
-  return family;
+// ── Remotion 렌더 ─────────────────────────────────────────────────
+async function renderWithRemotion(props, outputPath) {
+  const propsFile = 'remotion_props.json';
+  fs.writeFileSync(propsFile, JSON.stringify(props));
+
+  const chromium  = findChromium();
+  const chromFlag = chromium ? ` --browser-executable-path="${chromium}"` : '';
+  const entry     = path.resolve('remotion/index.jsx');
+
+  console.log('\n🎬 Remotion 렌더링 중...');
+  execSync(
+    `./node_modules/.bin/remotion render "${entry}" NovaVideo "${outputPath}"` +
+    ` --codec=h264 --crf=20 --props="${propsFile}"` +
+    chromFlag,
+    { stdio: 'inherit', timeout: 600000 }
+  );
+
+  try { fs.unlinkSync(propsFile); } catch {}
+  console.log(`✅ Remotion 렌더링 완료: ${outputPath}`);
 }
 
-// ── Canvas 유틸 ────────────────────────────────────────────────────
-function darkBg(ctx) {
-  ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, W, H);
+// ── 슬라이드 영상 생성 (Remotion) ────────────────────────────────
+async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl) {
+  const { toolDesc, bullets, steps, compareText } = parseContent(scriptText, toolName, compareWith, combo);
+
+  // 스크린샷 → base64 data URL
+  console.log('\n📸 툴 스크린샷 캡처 중...');
+  const screenshotBuf     = await captureToolScreenshot(toolUrl);
+  const screenshotDataUrl = screenshotBuf
+    ? `data:image/png;base64,${screenshotBuf.toString('base64')}`
+    : null;
+
+  // Remotion 영상 렌더 (오디오 없음)
+  const totalFrames = Math.round(Math.min(audioDuration, 60) * 30);
+  await renderWithRemotion(
+    { toolName, toolDesc, bullets, steps, compareText, screenshotDataUrl, totalFrames },
+    'output_silent.mp4'
+  );
+
+  // ffmpeg — 오디오 합성
+  console.log('\n🔊 오디오 합성 중...');
+  execSync(
+    `ffmpeg -y -i output_silent.mp4 -i audio.mp3 ` +
+    `-c:v copy -c:a aac -b:a 192k -shortest output.mp4`,
+    { stdio: 'inherit' }
+  );
+  console.log('✅ output.mp4 생성 완료 (Remotion 애니메이션)');
+
+  try { fs.unlinkSync('output_silent.mp4'); } catch {}
 }
 
-function box(ctx, x, y, w, h, r, color, alpha = 1) {
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, r);
-  ctx.fill();
-  ctx.restore();
-}
-
-function circle(ctx, cx, cy, r, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// 한국어 포함 텍스트 줄바꿈 (글자 단위)
-function wrap(ctx, text, x, y, maxW, lineH) {
-  let line = '', curY = y;
-  for (const ch of text) {
-    const test = line + ch;
-    if (ctx.measureText(test).width > maxW && line) {
-      ctx.fillText(line, x, curY);
-      line = ch;
-      curY += lineH;
-    } else {
-      line = test;
-    }
-  }
-  if (line) { ctx.fillText(line, x, curY); curY += lineH; }
-  return curY;
-}
-
-// ── 슬라이드 1: 후킹 (툴 스크린샷 배경) ──────────────────────────
-async function slide1(FONT, toolName, toolDesc, screenshotBuf) {
-  const c = createCanvas(W, H);
-  const ctx = c.getContext('2d');
-
-  // 배경: 스크린샷 or 다크 그라데이션
-  if (screenshotBuf) {
-    const img = await loadImage(screenshotBuf);
-    ctx.drawImage(img, 0, 0, W, H);
-  } else {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#0d1117');
-    g.addColorStop(0.5, '#1a1f2e');
-    g.addColorStop(1, '#0d1117');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // 다크 그라데이션 오버레이 (하단으로 갈수록 진해짐)
-  const overlay = ctx.createLinearGradient(0, 0, 0, H);
-  overlay.addColorStop(0,   'rgba(13,17,23,0.2)');
-  overlay.addColorStop(0.3, 'rgba(13,17,23,0.3)');
-  overlay.addColorStop(0.6, 'rgba(13,17,23,0.75)');
-  overlay.addColorStop(0.8, 'rgba(13,17,23,0.92)');
-  overlay.addColorStop(1,   'rgba(13,17,23,1.0)');
-  ctx.fillStyle = overlay;
-  ctx.fillRect(0, 0, W, H);
-
-  // NOVA 배지 (상단 우측)
-  box(ctx, W - 240, 50, 190, 72, 36, C.cyan, 0.15);
-  ctx.strokeStyle = C.cyan;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(W - 240, 50, 190, 72, 36);
-  ctx.stroke();
-  ctx.font = `bold 36px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  ctx.fillText('NOVA', W - 208, 97);
-
-  // 하단 영역: 툴 이름 + 설명 + CTA
-  const bottomY = H - 700;
-
-  // 라벨
-  ctx.font = `bold 38px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  ctx.fillText('오늘의 AI 툴', PAD, bottomY);
-
-  // 툴 이름 (크고 굵게)
-  ctx.font = `bold 100px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  const nameEndY = wrap(ctx, toolName, PAD, bottomY + 80, W - PAD * 2, 115);
-
-  // 한 줄 구분선
-  ctx.fillStyle = C.cyan;
-  ctx.fillRect(PAD, nameEndY + 10, 120, 6);
-
-  // 툴 설명
-  ctx.font = `46px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  const desc = toolDesc.length > 45 ? toolDesc.slice(0, 45) + '…' : toolDesc;
-  wrap(ctx, desc, PAD, nameEndY + 60, W - PAD * 2, 58);
-
-  // CTA 버튼
-  box(ctx, PAD, H - 180, W - PAD * 2, 120, 60, C.cyan);
-  ctx.font = `bold 48px "${FONT}"`;
-  ctx.fillStyle = '#0d1117';
-  ctx.fillText('지금 확인하러 가기  →', PAD + 60, H - 108);
-
-  return c;
-}
-
-// ── 슬라이드 2: 핵심 기능 3가지 ────────────────────────────────────
-function slide2(FONT, toolName, bullets) {
-  const c = createCanvas(W, H);
-  const ctx = c.getContext('2d');
-  darkBg(ctx);
-
-  // 헤더
-  ctx.font = `bold 44px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  ctx.fillText('왜 써야 할까요?', PAD, 140);
-
-  ctx.font = `bold 72px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  wrap(ctx, toolName, PAD, 200, W - PAD * 2, 84);
-
-  ctx.font = `bold 52px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  ctx.fillText('핵심 차이점 3가지', PAD, 370);
-
-  // 구분선
-  ctx.fillStyle = C.border;
-  ctx.fillRect(PAD, 400, W - PAD * 2, 2);
-
-  const accent = [C.cyan, C.purple, C.green];
-  const cardBg = ['rgba(32,184,205,0.08)', 'rgba(188,140,255,0.08)', 'rgba(63,185,80,0.08)'];
-
-  bullets.slice(0, 3).forEach((bullet, i) => {
-    const y = 440 + i * 460;
-    box(ctx, PAD, y, W - PAD * 2, 410, 16, C.card);
-    // 왼쪽 컬러 강조 바
-    ctx.fillStyle = accent[i];
-    ctx.beginPath();
-    ctx.roundRect(PAD, y, 8, 410, [16, 0, 0, 16]);
-    ctx.fill();
-    // 번호 원
-    circle(ctx, PAD + 90, y + 90, 58, accent[i] + '33');
-    ctx.font = `bold 64px "${FONT}"`;
-    ctx.fillStyle = accent[i];
-    ctx.fillText(`${i + 1}`, PAD + 72, y + 112);
-    // 텍스트
-    ctx.font = `bold 44px "${FONT}"`;
-    ctx.fillStyle = accent[i];
-    ctx.fillText(`POINT ${i + 1}`, PAD + 170, y + 80);
-    ctx.font = `42px "${FONT}"`;
-    ctx.fillStyle = C.textPri;
-    wrap(ctx, bullet, PAD + 50, y + 160, W - PAD * 2 - 80, 56);
-  });
-
-  return c;
-}
-
-// ── 슬라이드 3: vs 비교 ────────────────────────────────────────────
-function slide3(FONT, toolName, compareWith) {
-  const c = createCanvas(W, H);
-  const ctx = c.getContext('2d');
-  darkBg(ctx);
-
-  // 헤더
-  ctx.font = `bold 44px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  ctx.fillText('이미 있는 거 아닌가요?', PAD, 140);
-  ctx.font = `bold 72px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  ctx.fillText('직접 비교해봤습니다', PAD, 230);
-
-  // 구분선
-  ctx.fillStyle = C.border;
-  ctx.fillRect(PAD, 270, W - PAD * 2, 2);
-
-  // ── 왼쪽 패널 (기존 툴) ──
-  const lx = PAD, ly = 310, lw = 430, lh = 660;
-  box(ctx, lx, ly, lw, lh, 16, C.card);
-  // 상단 라벨바
-  box(ctx, lx, ly, lw, 80, [16, 16, 0, 0], C.textMute + '33');
-  ctx.font = `bold 36px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  ctx.fillText('기존', lx + 26, ly + 52);
-
-  ctx.font = `bold 52px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  wrap(ctx, compareWith || 'ChatGPT', lx + 26, ly + 140, lw - 52, 62);
-
-  ctx.font = `38px "${FONT}"`;
-  ctx.fillStyle = C.red;
-  ctx.fillText('✗  모든 분야 범용', lx + 26, ly + 440);
-  ctx.fillText('✗  높은 비용', lx + 26, ly + 510);
-  ctx.fillText('✗  학습 곡선 있음', lx + 26, ly + 580);
-
-  // ── VS 배지 ──
-  box(ctx, 470, 590, 140, 80, 40, C.red + 'cc');
-  ctx.font = `bold 52px "${FONT}"`;
-  ctx.fillStyle = '#fff';
-  ctx.fillText('VS', 506, 644);
-
-  // ── 오른쪽 패널 (신규 툴) ──
-  const rx = 620, ry = 310, rw = 420, rh = 660;
-  box(ctx, rx, ry, rw, rh, 16, C.card);
-  // 상단 컬러 라벨바
-  box(ctx, rx, ry, rw, 80, [16, 16, 0, 0], C.cyan + '44');
-  ctx.font = `bold 36px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  ctx.fillText('신규', rx + 26, ry + 52);
-
-  ctx.font = `bold 52px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  wrap(ctx, toolName, rx + 26, ry + 140, rw - 52, 62);
-
-  ctx.font = `38px "${FONT}"`;
-  ctx.fillStyle = C.green;
-  ctx.fillText('✓  이 분야 특화', rx + 26, ry + 440);
-  ctx.fillText('✓  무료 시작 가능', rx + 26, ry + 510);
-  ctx.fillText('✓  즉시 결과 확인', rx + 26, ry + 580);
-
-  // ── 결론 배너 ──
-  box(ctx, PAD, 1030, W - PAD * 2, 200, 16, C.green + '22');
-  ctx.strokeStyle = C.green;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(PAD, 1030, W - PAD * 2, 200, 16);
-  ctx.stroke();
-  ctx.font = `bold 44px "${FONT}"`;
-  ctx.fillStyle = C.green;
-  ctx.fillText('💡  결론', PAD + 30, 1100);
-  ctx.font = `42px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  wrap(ctx, `이 작업엔 ${toolName}가 압도적`, PAD + 30, 1148, W - PAD * 2 - 60, 52);
-
-  // 하단 보충 설명
-  ctx.font = `38px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  wrap(ctx, `${compareWith || 'ChatGPT'}는 범용, ${toolName}는 전문화 — 목적에 맞게 쓰세요`, PAD, 1290, W - PAD * 2, 50);
-
-  return c;
-}
-
-// ── 슬라이드 4: 이렇게 써요 ────────────────────────────────────────
-function slide4(FONT, toolName, steps) {
-  const c = createCanvas(W, H);
-  const ctx = c.getContext('2d');
-  darkBg(ctx);
-
-  // 헤더
-  ctx.font = `bold 44px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  ctx.fillText('시작하는 법', PAD, 140);
-  ctx.font = `bold 72px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  ctx.fillText('30초면 충분합니다', PAD, 230);
-  ctx.font = `44px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  wrap(ctx, `${toolName} 시작 가이드`, PAD, 300, W - PAD * 2, 54);
-
-  // 구분선
-  ctx.fillStyle = C.border;
-  ctx.fillRect(PAD, 375, W - PAD * 2, 2);
-
-  const stepColors = [C.cyan, C.purple, C.green];
-
-  steps.slice(0, 3).forEach((step, i) => {
-    const y = 420 + i * 490;
-    box(ctx, PAD, y, W - PAD * 2, 440, 16, C.card);
-
-    // STEP 번호 원
-    circle(ctx, PAD + 85, y + 90, 65, stepColors[i] + '33');
-    ctx.font = `bold 68px "${FONT}"`;
-    ctx.fillStyle = stepColors[i];
-    ctx.fillText(`${i + 1}`, PAD + 61, y + 114);
-
-    // STEP 라벨
-    ctx.font = `bold 40px "${FONT}"`;
-    ctx.fillStyle = stepColors[i];
-    ctx.fillText(`STEP ${i + 1}`, PAD + 175, y + 75);
-
-    // 단계 내용
-    ctx.font = `44px "${FONT}"`;
-    ctx.fillStyle = C.textPri;
-    wrap(ctx, step, PAD + 50, y + 170, W - PAD * 2 - 80, 58);
-  });
-
-  return c;
-}
-
-// ── 슬라이드 5: 조합 팁 + CTA ─────────────────────────────────────
-function slide5(FONT, toolName, combo) {
-  const c = createCanvas(W, H);
-  const ctx = c.getContext('2d');
-  darkBg(ctx);
-
-  // 헤더
-  ctx.font = `bold 44px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  ctx.fillText('프로 팁', PAD, 140);
-  ctx.font = `bold 72px "${FONT}"`;
-  ctx.fillStyle = C.textPri;
-  ctx.fillText('이렇게 조합하면 끝납니다', PAD, 230);
-
-  // 구분선
-  ctx.fillStyle = C.border;
-  ctx.fillRect(PAD, 270, W - PAD * 2, 2);
-
-  // 조합 카드
-  box(ctx, PAD, 310, W - PAD * 2, 560, 20, C.card);
-  ctx.strokeStyle = C.cyan + '66';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(PAD, 310, W - PAD * 2, 560, 20);
-  ctx.stroke();
-
-  // 툴 이름 박스
-  box(ctx, PAD + 40, 360, 540, 120, 12, C.cyan + '22');
-  ctx.font = `bold 60px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  wrap(ctx, toolName, PAD + 70, 440, 500, 72);
-
-  // + 기호
-  ctx.font = `bold 90px "${FONT}"`;
-  ctx.fillStyle = C.textMute;
-  ctx.fillText('+', PAD + 50, 570);
-
-  // 콤보 내용
-  ctx.font = `bold 52px "${FONT}"`;
-  ctx.fillStyle = C.green;
-  wrap(ctx, combo || '기존 워크플로우 연결', PAD + 50, 630, W - PAD * 2 - 80, 64);
-
-  // 효과 설명 박스
-  box(ctx, PAD + 40, 800, W - PAD * 2 - 80, 120, 12, C.green + '22');
-  ctx.font = `42px "${FONT}"`;
-  ctx.fillStyle = C.green;
-  ctx.fillText('→ 업무 시간이 눈에 띄게 줄어들어요', PAD + 70, 870);
-
-  // 효과 설명 보충
-  ctx.font = `42px "${FONT}"`;
-  ctx.fillStyle = C.textSec;
-  wrap(ctx, '이 조합이면 반복 작업 자동화 완성', PAD, 960, W - PAD * 2, 54);
-
-  // 팔로우 CTA 버튼
-  box(ctx, PAD, 1080, W - PAD * 2, 160, 80, C.cyan);
-  ctx.font = `bold 50px "${FONT}"`;
-  ctx.fillStyle = '#0d1117';
-  ctx.fillText('팔로우하고 매일 받아보세요  →', PAD + 50, 1178);
-
-  // NOVA 브랜드
-  ctx.font = `bold 44px "${FONT}"`;
-  ctx.fillStyle = C.cyan;
-  ctx.fillText('NOVA', PAD, H - 160);
-  ctx.font = `38px "${FONT}"`;
-  ctx.fillStyle = C.textMute;
-  ctx.fillText('매일 새로운 AI 툴', PAD + 125, H - 160);
-
-  // 장식 원
-  circle(ctx, W + 60, H - 100, 320, C.cyan + '18');
-
-  return c;
-}
-
-// ── 콘텐츠 파싱 ────────────────────────────────────────────────────
 function parseContent(scriptText, toolName, compareWith, combo) {
   const sentences = (scriptText.match(/[^.!?。\n]+[.!?。]*/g) || [scriptText])
     .map(s => s.trim()).filter(s => s.length > 5);
@@ -548,76 +204,6 @@ function parseContent(scriptText, toolName, compareWith, combo) {
     compareText: compareWith || 'ChatGPT',
     comboText: combo || `${toolName}로 반복 작업 자동화`,
   };
-}
-
-// ── 슬라이드 영상 생성 ─────────────────────────────────────────────
-async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl) {
-  const FONT = setupFonts();
-  const { toolDesc, bullets, steps, compareText, comboText } = parseContent(
-    scriptText, toolName, compareWith, combo
-  );
-
-  // 슬라이드 1용 스크린샷 캡처
-  console.log('\n📸 툴 스크린샷 캡처 중...');
-  const screenshotBuf = await captureToolScreenshot(toolUrl);
-
-  // 5개 슬라이드 PNG 생성
-  console.log('\n🎨 슬라이드 PNG 생성 중...');
-  const canvases = await Promise.all([
-    slide1(FONT, toolName, toolDesc, screenshotBuf),
-    Promise.resolve(slide2(FONT, toolName, bullets)),
-    Promise.resolve(slide3(FONT, toolName, compareText)),
-    Promise.resolve(slide4(FONT, toolName, steps)),
-    Promise.resolve(slide5(FONT, toolName, comboText)),
-  ]);
-
-  const slidePaths = canvases.map((canvas, i) => {
-    const p = `slide${i + 1}.png`;
-    fs.writeFileSync(p, canvas.toBuffer('image/png'));
-    console.log(`  ✅ slide${i + 1}.png`);
-    return p;
-  });
-
-  // 각 슬라이드 지속 시간 (5등분)
-  const total = Math.min(audioDuration, 60);
-  const seg = total / 5;
-  const fadeDur = 0.4;
-
-  // ffmpeg 입력 (각 슬라이드를 해당 시간만큼 루프)
-  const inputs = slidePaths
-    .map(p => `-loop 1 -t ${seg.toFixed(3)} -i ${p}`)
-    .join(' ');
-
-  // filter_complex: scale → fps → xfade 체인 (자막 없음)
-  const scales = slidePaths
-    .map((_, i) => `[${i}:v]setsar=1,fps=30[s${i}]`)
-    .join(';');
-
-  let xfades = '';
-  let prev = 's0';
-  for (let i = 1; i < 5; i++) {
-    const out = i === 4 ? 'vslides' : `x${i}`;
-    const offset = (i * (seg - fadeDur)).toFixed(3);
-    xfades += `;[${prev}][s${i}]xfade=transition=fade:duration=${fadeDur}:offset=${offset}[${out}]`;
-    prev = out;
-  }
-
-  const filterComplex = scales + xfades;
-  const totalDur = (5 * seg - 4 * fadeDur).toFixed(3);
-
-  console.log('\n🎬 ffmpeg 슬라이드쇼 합성 중...');
-  execSync(
-    `ffmpeg -y ${inputs} -i audio.mp3 ` +
-    `-filter_complex "${filterComplex}" ` +
-    `-map "[vslides]" -map ${slidePaths.length}:a ` +
-    `-c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k ` +
-    `-t ${totalDur} output.mp4`,
-    { stdio: 'inherit' }
-  );
-  console.log('✅ output.mp4 생성 완료 (슬라이드 스타일)');
-
-  // 슬라이드 PNG 정리
-  slidePaths.forEach(p => { try { fs.unlinkSync(p); } catch {} });
 }
 
 // ── Supabase Storage 업로드 ────────────────────────────────────────
