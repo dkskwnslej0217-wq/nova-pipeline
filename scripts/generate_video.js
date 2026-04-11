@@ -161,10 +161,10 @@ function slide1(FONT, toolName, toolDesc) {
   ctx.fillStyle = '#94A3B8';
   ctx.fillText('🔧  NEW AI TOOL', PAD + 24, 285);
 
-  // 툴 이름 (크게)
-  ctx.font = `bold 100px "${FONT}"`;
+  // 툴 이름
+  ctx.font = `bold 68px "${FONT}"`;
   ctx.fillStyle = '#F8FAFC';
-  wrap(ctx, toolName, PAD, 440, W - PAD * 2, 115);
+  wrap(ctx, toolName, PAD, 440, W - PAD * 2, 82);
 
   // 툴 설명 한 줄
   ctx.font = `46px "${FONT}"`;
@@ -244,32 +244,32 @@ function slide3(FONT, toolName, compareWith) {
   ctx.font = `36px "${FONT}"`;
   ctx.fillStyle = '#94A3B8';
   ctx.fillText('기존', PAD + 30, 390);
-  ctx.font = `bold 68px "${FONT}"`;
+  ctx.font = `bold 44px "${FONT}"`;
   ctx.fillStyle = '#F8FAFC';
-  wrap(ctx, compareWith || 'ChatGPT', PAD + 30, 470, 380, 78);
+  wrap(ctx, compareWith || 'ChatGPT', PAD + 30, 460, 380, 54);
   ctx.font = `38px "${FONT}"`;
   ctx.fillStyle = '#64748B';
   ctx.fillText('✗  모든 분야 범용', PAD + 30, 750);
   ctx.fillText('✗  높은 비용', PAD + 30, 810);
 
   // VS 배지
-  box(ctx, 450, 540, 180, 80, 40, '#DC2626');
-  ctx.font = `bold 52px "${FONT}"`;
+  box(ctx, 460, 540, 160, 76, 38, '#DC2626');
+  ctx.font = `bold 48px "${FONT}"`;
   ctx.fillStyle = '#FFF';
-  ctx.fillText('VS', 488, 596);
+  ctx.fillText('VS', 498, 594);
 
-  // 오른쪽 패널 (새 툴)
-  box(ctx, 650, 310, 380, 580, 20, '#1D4ED8');
+  // 오른쪽 패널 (새 툴) — 너비 420px (기존 380px → 넓힘)
+  box(ctx, 620, 310, 420, 580, 20, '#1D4ED8');
   ctx.font = `36px "${FONT}"`;
   ctx.fillStyle = '#93C5FD';
-  ctx.fillText('신규', 680, 390);
-  ctx.font = `bold 68px "${FONT}"`;
+  ctx.fillText('신규', 650, 390);
+  ctx.font = `bold 44px "${FONT}"`;
   ctx.fillStyle = '#F8FAFC';
-  wrap(ctx, toolName, 680, 470, 320, 78);
+  wrap(ctx, toolName, 650, 460, 380, 54);
   ctx.font = `38px "${FONT}"`;
   ctx.fillStyle = '#BFDBFE';
-  ctx.fillText('✓  이 분야 특화', 680, 750);
-  ctx.fillText('✓  무료 시작 가능', 680, 810);
+  ctx.fillText('✓  이 분야 특화', 650, 750);
+  ctx.fillText('✓  무료 시작 가능', 650, 810);
 
   // 결론 배너
   box(ctx, PAD, 940, W - PAD * 2, 180, 20, '#065F46');
@@ -341,9 +341,9 @@ function slide5(FONT, toolName, combo) {
 
   // 조합 박스
   box(ctx, PAD, 270, W - PAD * 2, 500, 24, '#064E3B');
-  ctx.font = `bold 100px "${FONT}"`;
+  ctx.font = `bold 68px "${FONT}"`;
   ctx.fillStyle = '#6EE7B7';
-  ctx.fillText(toolName, PAD + 40, 400);
+  wrap(ctx, toolName, PAD + 40, 380, W - PAD * 2 - 80, 80);
   ctx.font = `bold 80px "${FONT}"`;
   ctx.fillStyle = '#34D399';
   ctx.fillText('+', PAD + 40, 510);
@@ -436,21 +436,12 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
   const seg = total / 5;
   const fadeDur = 0.4;
 
-  // 자막 스타일
-  const srtEscaped = path.resolve(srtPath).replace(/\\/g, '/').replace(/:/g, '\\:');
-  const subStyle = [
-    'FontName=NanumGothic', 'FontSize=17', 'Bold=1',
-    'PrimaryColour=&H00FFFFFF', 'OutlineColour=&H00000000',
-    'BackColour=&HAA000000', 'Outline=2', 'Shadow=0',
-    'BorderStyle=3', 'Alignment=2', 'MarginV=70',
-  ].join(',');
-
   // ffmpeg 입력 (각 슬라이드를 해당 시간만큼 루프)
   const inputs = slidePaths
     .map(p => `-loop 1 -t ${seg.toFixed(3)} -i ${p}`)
     .join(' ');
 
-  // filter_complex: scale → fps → xfade 체인 → 자막
+  // filter_complex: scale → fps → xfade 체인 (자막 없음 — 슬라이드 텍스트가 내레이션 역할)
   const scales = slidePaths
     .map((_, i) => `[${i}:v]setsar=1,fps=30[s${i}]`)
     .join(';');
@@ -465,8 +456,7 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
     prev = out;
   }
 
-  const subFilter = `;[vslides]subtitles=${srtEscaped}:force_style='${subStyle}'[vout]`;
-  const filterComplex = scales + xfades + subFilter;
+  const filterComplex = scales + xfades;
 
   const totalDur = (5 * seg - 4 * fadeDur).toFixed(3);
 
@@ -474,7 +464,7 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
   execSync(
     `ffmpeg -y ${inputs} -i audio.mp3 ` +
     `-filter_complex "${filterComplex}" ` +
-    `-map "[vout]" -map ${slidePaths.length}:a ` +
+    `-map "[vslides]" -map ${slidePaths.length}:a ` +
     `-c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k ` +
     `-t ${totalDur} output.mp4`,
     { stdio: 'inherit' }
