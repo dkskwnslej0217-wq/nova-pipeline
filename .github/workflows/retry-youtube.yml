@@ -1,0 +1,38 @@
+name: Retry YouTube Upload
+
+on:
+  repository_dispatch:
+    types: [retry-youtube]
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: 의존성 설치
+        run: npm install
+
+      - name: YouTube 재업로드
+        env:
+          VIDEO_URL: ${{ github.event.client_payload.video_url }}
+          VIDEO_TITLE: ${{ github.event.client_payload.title }}
+          VIDEO_DESC: ${{ github.event.client_payload.description }}
+          VIDEO_TAGS: ${{ toJson(github.event.client_payload.tags) }}
+          RETRY_DATE: ${{ github.event.client_payload.date }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/retry_youtube.js

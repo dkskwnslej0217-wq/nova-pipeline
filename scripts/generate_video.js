@@ -510,6 +510,42 @@ async function postFacebookReel(videoUrl, description) {
   return video_id;
 }
 
+// ── publish_log 헬퍼 ──────────────────────────────────────────────
+function kstDate() {
+  return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+}
+
+async function getPublishLog(date, platform) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/publish_log?date=eq.${date}&platform=eq.${platform}&select=*`,
+    { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+  );
+  const rows = await res.json();
+  return rows?.[0] || null;
+}
+
+async function upsertPublishLog(date, platform, status, { postId = null, errorMsg = null, content = null, retryCount = 0 } = {}) {
+  await fetch(`${SUPABASE_URL}/rest/v1/publish_log`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      date,
+      platform,
+      status,
+      post_id: postId,
+      error_msg: errorMsg,
+      content,
+      retry_count: retryCount,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+}
+
 // ── 메인 ──────────────────────────────────────────────────────────
 async function run() {
   const scriptText = (SCRIPT_TEXT || 'NOVA AI 자동화 콘텐츠입니다.').slice(0, 2500);
@@ -588,6 +624,7 @@ asyncio.run(main())
 
   // ── 5. 플랫폼 발행 (순차: Instagram → YouTube → Facebook) ──────
   console.log('\n📤 플랫폼 발행 중...');
+  const today = kstDate();
 
   // 인스타 캐러셀 캡션 — 링크 금지, 바이오 안내만
   const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')}`;
@@ -598,55 +635,105 @@ asyncio.run(main())
 
   // ── Instagram ─────────────────────────────────────────────
   let igStatus;
-  try {
-    await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCaption));
-    igStatus = '✅';
-    await tg(`📸 Instagram 발행 완료\n🔧 툴: ${toolName}`);
-  } catch (e) {
-    igStatus = `❌ ${e.message?.slice(0, 60)}`;
-    await tg(`⚠️ Instagram 실패\n${igStatus}`);
+  const igLog = await getPublishLog(today, 'instagram');
+  if (igLog?.status === 'success') {
+    igStatus = '✅ (이미 발행됨, 스킵)';
+    console.log('⏭️ Instagram 이미 발행됨 — 스킵');
+  } else {
+    const igRetryCount = (igLog?.retry_count || 0);
+    try {
+      const igPostId = await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCaption));
+      igStatus = '✅';
+      await upsertPublishLog(today, 'instagram', 'success', {
+        postId: igPostId,
+        content: { imageUrls: igImageUrls, caption: igCaption },
+        retryCount: igRetryCount,
+      });
+      await tg(`📸 Instagram 발행 완료\n🔧 툴: ${toolName}`);
+    } catch (e) {
+      igStatus = `❌ ${e.message?.slice(0, 60)}`;
+      await upsertPublishLog(today, 'instagram', 'failed', {
+        errorMsg: e.message?.slice(0, 200),
+        content: { imageUrls: igImageUrls, caption: igCaption },
+        retryCount: igRetryCount,
+      });
+      await tg(`⚠️ Instagram 실패 (자동 재시도 예정)\n${igStatus}`);
+    }
   }
 
   // ── YouTube ───────────────────────────────────────────────
   let ytStatus;
-  try {
-    const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
-    auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
-    const youtube = google.youtube({ version: 'v3', auth });
+  const ytLog = await getPublishLog(today, 'youtube');
+  if (ytLog?.status === 'success') {
+    ytStatus = '✅ (이미 발행됨, 스킵)';
+    console.log('⏭️ YouTube 이미 발행됨 — 스킵');
+  } else {
+    const ytRetryCount = (ytLog?.retry_count || 0);
     const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI'];
     const ytDesc = `${scriptText.slice(0, 400)}\n\n🔗 ${toolUrl}\n\n#Shorts #AI툴 #오늘의AI`;
-    const res = await youtube.videos.insert({
-      part: ['snippet', 'status'],
-      requestBody: {
-        snippet: {
-          title: shortsTitle,
-          description: ytDesc,
-          tags: allTags,
-          categoryId: '28',
-          defaultLanguage: 'ko',
+    try {
+      const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
+      auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
+      const youtube = google.youtube({ version: 'v3', auth });
+      const res = await youtube.videos.insert({
+        part: ['snippet', 'status'],
+        requestBody: {
+          snippet: {
+            title: shortsTitle,
+            description: ytDesc,
+            tags: allTags,
+            categoryId: '28',
+            defaultLanguage: 'ko',
+          },
+          status: { privacyStatus: 'public' },
         },
-        status: { privacyStatus: 'public' },
-      },
-      media: { body: fs.createReadStream('output.mp4') },
-    });
-    const ytUrl = `https://youtu.be/${res.data.id}`;
-    console.log(`✅ YouTube Shorts 업로드: ${ytUrl}`);
-    ytStatus = `✅ ${ytUrl}`;
-    await tg(`▶️ YouTube 업로드 완료\n${ytUrl}`);
-  } catch (e) {
-    ytStatus = `❌ ${e.message?.slice(0, 60)}`;
-    await tg(`⚠️ YouTube 실패\n${ytStatus}`);
+        media: { body: fs.createReadStream('output.mp4') },
+      });
+      const ytUrl = `https://youtu.be/${res.data.id}`;
+      console.log(`✅ YouTube Shorts 업로드: ${ytUrl}`);
+      ytStatus = `✅ ${ytUrl}`;
+      await upsertPublishLog(today, 'youtube', 'success', {
+        postId: res.data.id,
+        content: { videoUrl, title: shortsTitle, description: ytDesc, tags: allTags },
+        retryCount: ytRetryCount,
+      });
+      await tg(`▶️ YouTube 업로드 완료\n${ytUrl}`);
+    } catch (e) {
+      ytStatus = `❌ ${e.message?.slice(0, 60)}`;
+      await upsertPublishLog(today, 'youtube', 'failed', {
+        errorMsg: e.message?.slice(0, 200),
+        content: { videoUrl, title: shortsTitle, description: ytDesc, tags: allTags },
+        retryCount: ytRetryCount,
+      });
+      await tg(`⚠️ YouTube 실패 (자동 재시도 예정)\n${ytStatus}`);
+    }
   }
 
   // ── Facebook ──────────────────────────────────────────────
   let fbStatus;
-  try {
-    await withRetry('Facebook 릴스', () => postFacebookReel(videoUrl, fbCaption));
-    fbStatus = '✅';
-    await tg(`📘 Facebook 발행 완료`);
-  } catch (e) {
-    fbStatus = `❌ ${e.message?.slice(0, 60)}`;
-    await tg(`⚠️ Facebook 실패\n${fbStatus}`);
+  const fbLog = await getPublishLog(today, 'facebook');
+  if (fbLog?.status === 'success') {
+    fbStatus = '✅ (이미 발행됨, 스킵)';
+    console.log('⏭️ Facebook 이미 발행됨 — 스킵');
+  } else {
+    const fbRetryCount = (fbLog?.retry_count || 0);
+    try {
+      await withRetry('Facebook 릴스', () => postFacebookReel(videoUrl, fbCaption));
+      fbStatus = '✅';
+      await upsertPublishLog(today, 'facebook', 'success', {
+        content: { videoUrl, caption: fbCaption },
+        retryCount: fbRetryCount,
+      });
+      await tg(`📘 Facebook 발행 완료`);
+    } catch (e) {
+      fbStatus = `❌ ${e.message?.slice(0, 60)}`;
+      await upsertPublishLog(today, 'facebook', 'failed', {
+        errorMsg: e.message?.slice(0, 200),
+        content: { videoUrl, caption: fbCaption },
+        retryCount: fbRetryCount,
+      });
+      await tg(`⚠️ Facebook 실패 (자동 재시도 예정)\n${fbStatus}`);
+    }
   }
 
   // ── 6. 임시 파일 정리 ─────────────────────────────────────────
