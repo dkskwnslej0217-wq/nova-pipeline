@@ -283,23 +283,40 @@ ${type === 'title' ? `<div class="title">${toolName}</div>` : ''}
 async function generateCarouselImages(slides, toolName) {
   const types = ['title', 'problem', 'feature', 'pros', 'cons', 'target', 'cta'];
   const keys  = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
-  const chromium = findChromium();
-  if (!chromium) throw new Error('Chromium 없음 — 캐러셀 생성 불가');
 
+  const puppeteer = (await import('puppeteer')).default;
+  const chromiumPaths = [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
+  ];
+  const executablePath = chromiumPaths.find(p => fs.existsSync(p));
+  const launchOpts = {
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-gpu', '--disable-setuid-sandbox', '--window-size=1080,1080'],
+  };
+  if (executablePath) launchOpts.executablePath = executablePath;
+
+  const browser = await puppeteer.launch(launchOpts);
   const paths = [];
+
   for (let i = 0; i < 7; i++) {
     const html    = makeSlideHTML(i + 1, 7, slides[keys[i]] || '', toolName, types[i]);
     const htmlOut = `/tmp/ig_slide_${i}.html`;
     const imgOut  = `/tmp/ig_carousel_${i}.png`;
     fs.writeFileSync(htmlOut, html);
-    execSync(
-      `${chromium} --headless --no-sandbox --disable-gpu ` +
-      `--window-size=1080,1080 --screenshot="${imgOut}" "file://${htmlOut}"`,
-      { stdio: 'inherit', timeout: 30000 }
-    );
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1080, height: 1080 });
+    await page.goto(`file://${htmlOut}`, { waitUntil: 'networkidle0' });
+    await page.screenshot({ path: imgOut, type: 'png' });
+    await page.close();
+
     paths.push(imgOut);
     console.log(`  🖼️ 슬라이드 ${i + 1}/7 완료`);
   }
+
+  await browser.close();
   return paths;
 }
 
