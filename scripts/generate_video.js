@@ -437,16 +437,18 @@ async function postInstagramReel(videoUrl, caption) {
   console.log(`  📦 IG 컨테이너 ID: ${containerId}`);
 
   console.log('  ⏳ Instagram 영상 처리 대기 중...');
+  let igReady = false;
   for (let i = 0; i < 18; i++) {
     await new Promise(r => setTimeout(r, 10000));
     const statusRes = await fetch(
       `${base}/${containerId}?fields=status_code&access_token=${token}`
     );
     const { status_code } = await statusRes.json();
-    console.log(`  IG 상태: ${status_code}`);
-    if (status_code === 'FINISHED') break;
+    console.log(`  IG 상태: ${status_code} (${i + 1}/18)`);
+    if (status_code === 'FINISHED') { igReady = true; break; }
     if (status_code === 'ERROR') throw new Error('IG 영상 처리 오류');
   }
+  if (!igReady) throw new Error('IG 영상 처리 시간 초과 (3분) — 재시도 예정');
 
   const publishRes = await fetch(`${base}/${userId}/media_publish`, {
     method: 'POST',

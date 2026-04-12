@@ -196,15 +196,19 @@ export default async function handler() {
       let postId;
       if (platform === 'instagram') {
         postId = await retryInstagram(content, retry_count);
+        await updateLog(today, platform, 'success', { postId, retryCount: retry_count + 1 });
+        await tg(`✅ instagram 자동 재시도 성공 (${retry_count + 1}번째 시도)`);
       } else if (platform === 'facebook') {
         postId = await retryFacebook(content, retry_count);
+        await updateLog(today, platform, 'success', { postId, retryCount: retry_count + 1 });
+        await tg(`✅ facebook 자동 재시도 성공 (${retry_count + 1}번째 시도)`);
       } else if (platform === 'youtube') {
-        postId = await retryYouTube(content, today);
+        // GitHub Actions에 dispatch → 완료는 retry_youtube.js가 직접 DB 업데이트
+        await retryYouTube(content, today);
+        await updateLog(today, platform, 'pending', { retryCount: retry_count + 1 });
+        await tg(`▶️ youtube 재업로드 시작됨 (GitHub Actions 실행 중...)`);
       }
-
-      await updateLog(today, platform, 'success', { postId, retryCount: retry_count + 1 });
-      results[platform] = 'success';
-      await tg(`✅ ${platform} 자동 재시도 성공 (${retry_count + 1}번째 시도)`);
+      results[platform] = 'dispatched_or_success';
     } catch (e) {
       await updateLog(today, platform, 'failed', {
         errorMsg: e.message?.slice(0, 200),

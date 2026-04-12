@@ -498,7 +498,7 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
       body: JSON.stringify({
         model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }],
-        max_tokens: 900,
+        max_tokens: parseInt(process.env.GROQ_MAX_TOKENS || '600'),
         temperature: 0.8,
       }),
     });
