@@ -254,23 +254,32 @@ function makeSlideHTML(slideNum, total, text, toolName, type) {
     `<div class="dot${i + 1 === slideNum ? ' on' : ''}"></div>`
   ).join('');
 
+  const formattedText = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
+    .replace(/→/g, `<span style="color:${accent}">→</span>`)
+    .replace(/✅/g, `<span style="color:#3fb950">✅</span>`)
+    .replace(/❌/g, `<span style="color:#f85149">❌</span>`)
+    .replace(/①|②|③/g, m => `<span style="color:${accent};font-weight:700">${m}</span>`)
+    .replace(/•/g, `<span style="color:${accent}">•</span>`);
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{width:1080px;height:1080px;background:#0d1117;
   font-family:'Noto Sans KR','NanumGothic',sans-serif;
   display:flex;flex-direction:column;justify-content:center;
-  align-items:flex-start;padding:90px;position:relative;overflow:hidden}
+  align-items:flex-start;padding:80px 90px;position:relative;overflow:hidden}
 .glow{position:absolute;top:-180px;right:-180px;width:540px;height:540px;
   border-radius:50%;background:radial-gradient(circle,${accent}25 0%,transparent 70%)}
-.nova{position:absolute;top:52px;right:64px;border:2px solid ${accent};
-  border-radius:40px;padding:14px 30px;color:${accent};font-size:30px;
+.nova{position:absolute;top:48px;right:60px;border:2px solid ${accent};
+  border-radius:40px;padding:12px 28px;color:${accent};font-size:28px;
   font-weight:900;background:${accent}18;letter-spacing:2px}
-.label{color:${accent};font-size:34px;font-weight:700;margin-bottom:24px;
-  display:flex;align-items:center;gap:14px}
-.bar{width:72px;height:6px;border-radius:3px;background:${accent};margin-bottom:44px}
-.title{color:#e6edf3;font-size:60px;font-weight:900;margin-bottom:28px;line-height:1.2}
-.body{color:#c9d1d9;font-size:50px;font-weight:400;line-height:1.7;word-break:keep-all;max-width:900px}
-.dots{position:absolute;bottom:52px;left:50%;transform:translateX(-50%);
+.label{color:${accent};font-size:30px;font-weight:700;margin-bottom:18px;
+  display:flex;align-items:center;gap:12px}
+.bar{width:64px;height:5px;border-radius:3px;background:${accent};margin-bottom:32px}
+.title{color:#e6edf3;font-size:56px;font-weight:900;margin-bottom:20px;line-height:1.2}
+.body{color:#c9d1d9;font-size:38px;font-weight:400;line-height:1.9;word-break:keep-all;max-width:900px}
+.dots{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);
   display:flex;gap:12px}
 .dot{width:12px;height:12px;border-radius:50%;background:#30363d}
 .dot.on{background:${accent}}
@@ -280,7 +289,7 @@ body{width:1080px;height:1080px;background:#0d1117;
 <div class="label"><span>${icon}</span>${label}</div>
 <div class="bar"></div>
 ${type === 'title' ? `<div class="title">${toolName}</div>` : ''}
-<div class="body">${text.replace(/\n/g, '<br>').replace(/→/g, '<span style="color:${accent}">→</span>')}</div>
+<div class="body">${formattedText}</div>
 <div class="dots">${dots}</div>
 </body></html>`;
 }
