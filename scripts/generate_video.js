@@ -401,8 +401,24 @@ async function postInstagramCarousel(imageUrls, caption) {
   });
   const carData = await carRes.json();
   if (!carData.id) throw new Error(`IG 캐러셀 생성 실패: ${JSON.stringify(carData)}`);
+  console.log(`  📦 IG 캐러셀 컨테이너: ${carData.id}`);
 
-  // 3. 발행
+  // 3. 캐러셀 처리 완료 대기 (FINISHED 될 때까지 폴링)
+  console.log('  ⏳ Instagram 캐러셀 처리 대기 중...');
+  let carReady = false;
+  for (let i = 0; i < 12; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const statusRes = await fetch(
+      `${base}/${carData.id}?fields=status_code&access_token=${token}`
+    );
+    const { status_code } = await statusRes.json();
+    console.log(`  IG 캐러셀 상태: ${status_code} (${i + 1}/12)`);
+    if (status_code === 'FINISHED') { carReady = true; break; }
+    if (status_code === 'ERROR') throw new Error('IG 캐러셀 처리 오류');
+  }
+  if (!carReady) throw new Error('IG 캐러셀 처리 시간 초과 (1분) — 재시도 예정');
+
+  // 4. 발행
   const pubRes = await fetch(`${base}/${userId}/media_publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
