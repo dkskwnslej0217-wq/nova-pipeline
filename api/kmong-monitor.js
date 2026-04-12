@@ -114,33 +114,56 @@ export default async function handler(req) {
       `x-kmong-authorization=${accessToken}`
     );
 
-    // 2. 알림 조회
-    const alarms = await kmongFetch('/api/user/v2/unread-alarms', accessToken, updatedCookies);
+    // 2. 병렬로 API 조회
+    const [alarms, proposalsData, kmongNotifs] = await Promise.all([
+      kmongFetch('/api/user/v2/unread-alarms', accessToken, updatedCookies),
+      kmongFetch(
+        '/api/custom-project/v1/seller/proposals?page=1&filter=ALL&meetingStatus=ALL&isNotRespond=false',
+        accessToken, updatedCookies
+      ).catch(() => ({ unrepliedMeetings: 0, totalCount: 0 })),
+      kmongFetch('/api/v5/user/notifications?type=KMONG&page=1', accessToken, updatedCookies)
+        .catch(() => ({ notifications: [] })),
+    ]);
+
     const current = {
-      inboxes: alarms.inboxes || 0,
-      orders:  alarms.order_count || 0,
-      kmong:   alarms.kmong_count || 0,
+      inboxes:          alarms.inboxes || 0,
+      orders:           alarms.order_count || 0,
+      kmong:            alarms.kmong_count || 0,
+      unrepliedProposals: proposalsData.unrepliedMeetings || 0,
+      totalProposals:   proposalsData.totalCount || 0,
     };
 
     // 3. 이전 상태 로드
     const prevRaw = await kvGet('alarms');
-    const prev = prevRaw ? JSON.parse(prevRaw) : { inboxes: 0, orders: 0, kmong: 0 };
+    const prev = prevRaw ? JSON.parse(prevRaw) : { inboxes: 0, orders: 0, kmong: 0, unrepliedProposals: 0 };
 
-    const messages = [];
+    const msgs = [];
 
-    if (current.inboxes > prev.inboxes) {
-      messages.push(`💬 새 메시지 ${current.inboxes - prev.inboxes}개 도착 (총 ${current.inboxes}개 미읽음)`);
+    if (current.inboxes > (prev.inboxes || 0)) {
+      msgs.push(`💬 새 쪽지 ${current.inboxes - (prev.inboxes||0)}개 도착`);
     }
-    if (current.orders > prev.orders) {
-      messages.push(`🛒 새 주문 알림 ${current.orders - prev.orders}개 (총 ${current.orders}개)`);
+    if (current.unrepliedProposals > (prev.unrepliedProposals || 0)) {
+      msgs.push(`📩 새 견적 요청 ${current.unrepliedProposals - (prev.unrepliedProposals||0)}개\n   → kmong.com/seller/proposals 확인`);
     }
-    if (current.kmong > prev.kmong) {
-      messages.push(`📋 크몽 알림 ${current.kmong - prev.kmong}개 (승인/반려 확인 필요)`);
+    if (current.orders > (prev.orders || 0)) {
+      msgs.push(`🛒 새 주문 ${current.orders - (prev.orders||0)}개`);
+    }
+
+    // 크몽 알림 중 새 GIG_REJECTED / GIG_APPROVED 찾기
+    const newKmongNotifs = (kmongNotifs.notifications || []).filter(n =>
+      n.theme === 'NOTIFICATION' && n.is_unread
+    );
+    for (const n of newKmongNotifs) {
+      if (n.type === 'GIG_REJECTED') {
+        msgs.push(`❌ 서비스 비승인: PID ${n.PID}\n   "${n.message}"`);
+      } else if (n.type === 'GIG_APPROVED') {
+        msgs.push(`✅ 서비스 승인: PID ${n.PID}`);
+      }
     }
 
     // 4. 알림 전송
-    if (messages.length > 0) {
-      await sendTelegram(messages.join('\n'));
+    if (msgs.length > 0) {
+      await sendTelegram(msgs.join('\n\n'));
     }
 
     // 5. 상태 저장
@@ -151,8 +174,8 @@ export default async function handler(req) {
       ok: true,
       current,
       prev,
-      notified: messages.length > 0,
-      messages,
+      notified: msgs.length > 0,
+      messages: msgs,
     };
     console.log('[kmong-monitor]', JSON.stringify(result));
     return new Response(JSON.stringify(result), {
