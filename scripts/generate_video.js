@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 const {
   SCRIPT_TEXT, SCRIPT_TITLE, SCRIPT_TAGS,
   SCRIPT_TOOL_NAME, SCRIPT_COMPARE, SCRIPT_COMBO, SCRIPT_TOOL_URL,
+  SCRIPT_IG_SLIDES,
   SUPABASE_URL, SUPABASE_SERVICE_KEY,
   INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_BUSINESS_ACCOUNT_ID,
   FACEBOOK_ACCESS_TOKEN, FACEBOOK_PAGE_ID,
@@ -221,6 +222,169 @@ async function uploadToSupabase(filePath) {
   return publicUrl;
 }
 
+// ── Instagram 캐러셀 이미지 생성 ──────────────────────────────────
+function parseIGSlides(raw, toolName) {
+  const result = {};
+  for (let i = 1; i <= 7; i++) {
+    const m = raw?.match(new RegExp(`\\[S${i}\\]\\s*([^\\[]*)`));
+    result[`s${i}`] = m ? m[1].trim() : '';
+  }
+  if (!result.s1) result.s1 = `오늘의 AI 툴: ${toolName}`;
+  if (!result.s7) result.s7 = '지금 무료로 시작 가능 → 링크는 바이오 참고 🔗';
+  return result;
+}
+
+function makeSlideHTML(slideNum, total, text, toolName, type) {
+  const cfg = {
+    title:   { accent: '#20B8CD', icon: '🤖', label: '오늘의 AI 툴' },
+    problem: { accent: '#f97316', icon: '💡', label: '이런 문제 있으세요?' },
+    feature: { accent: '#3b82f6', icon: '⚡', label: '핵심 기능' },
+    pros:    { accent: '#3fb950', icon: '✅', label: '장점' },
+    cons:    { accent: '#f85149', icon: '⚠️', label: '단점 (솔직하게)' },
+    target:  { accent: '#a855f7', icon: '🎯', label: '이런 분께 추천' },
+    cta:     { accent: '#20B8CD', icon: '🚀', label: '시작하기' },
+  };
+  const { accent, icon, label } = cfg[type] || cfg.title;
+  const dots = Array.from({ length: total }, (_, i) =>
+    `<div class="dot${i + 1 === slideNum ? ' on' : ''}"></div>`
+  ).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:1080px;height:1080px;background:#0d1117;
+  font-family:'Noto Sans KR','NanumGothic',sans-serif;
+  display:flex;flex-direction:column;justify-content:center;
+  align-items:flex-start;padding:90px;position:relative;overflow:hidden}
+.glow{position:absolute;top:-180px;right:-180px;width:540px;height:540px;
+  border-radius:50%;background:radial-gradient(circle,${accent}25 0%,transparent 70%)}
+.nova{position:absolute;top:52px;right:64px;border:2px solid ${accent};
+  border-radius:40px;padding:14px 30px;color:${accent};font-size:30px;
+  font-weight:900;background:${accent}18;letter-spacing:2px}
+.label{color:${accent};font-size:34px;font-weight:700;margin-bottom:24px;
+  display:flex;align-items:center;gap:14px}
+.bar{width:72px;height:6px;border-radius:3px;background:${accent};margin-bottom:44px}
+.title{color:#e6edf3;font-size:60px;font-weight:900;margin-bottom:28px;line-height:1.2}
+.body{color:#c9d1d9;font-size:50px;font-weight:400;line-height:1.7;word-break:keep-all;max-width:900px}
+.dots{position:absolute;bottom:52px;left:50%;transform:translateX(-50%);
+  display:flex;gap:12px}
+.dot{width:12px;height:12px;border-radius:50%;background:#30363d}
+.dot.on{background:${accent}}
+</style></head><body>
+<div class="glow"></div>
+<div class="nova">NOVA</div>
+<div class="label"><span>${icon}</span>${label}</div>
+<div class="bar"></div>
+${type === 'title' ? `<div class="title">${toolName}</div>` : ''}
+<div class="body">${text.replace(/\n/g, '<br>').replace(/→/g, '<span style="color:${accent}">→</span>')}</div>
+<div class="dots">${dots}</div>
+</body></html>`;
+}
+
+async function generateCarouselImages(slides, toolName) {
+  const types = ['title', 'problem', 'feature', 'pros', 'cons', 'target', 'cta'];
+  const keys  = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
+  const chromium = findChromium();
+  if (!chromium) throw new Error('Chromium 없음 — 캐러셀 생성 불가');
+
+  const paths = [];
+  for (let i = 0; i < 7; i++) {
+    const html    = makeSlideHTML(i + 1, 7, slides[keys[i]] || '', toolName, types[i]);
+    const htmlOut = `/tmp/ig_slide_${i}.html`;
+    const imgOut  = `/tmp/ig_carousel_${i}.png`;
+    fs.writeFileSync(htmlOut, html);
+    execSync(
+      `${chromium} --headless --no-sandbox --disable-gpu ` +
+      `--window-size=1080,1080 --screenshot="${imgOut}" "file://${htmlOut}"`,
+      { stdio: 'inherit', timeout: 30000 }
+    );
+    paths.push(imgOut);
+    console.log(`  🖼️ 슬라이드 ${i + 1}/7 완료`);
+  }
+  return paths;
+}
+
+async function uploadCarouselToSupabase(paths) {
+  const bucket = 'carousel';
+
+  // 버킷 생성 (이미 있으면 무시)
+  await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name: bucket, public: true }),
+  });
+
+  const ts = Date.now();
+  const urls = [];
+  for (let i = 0; i < paths.length; i++) {
+    const fileName = `${ts}_${i}.png`;
+    const buf = fs.readFileSync(paths[i]);
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${fileName}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'image/png',
+        'x-upsert': 'true',
+      },
+      body: buf,
+    });
+    if (!res.ok) throw new Error(`Supabase 업로드 실패 [${i}]: ${res.status}`);
+    urls.push(`${SUPABASE_URL}/storage/v1/object/public/${bucket}/${fileName}`);
+    console.log(`  ☁️ 업로드 ${i + 1}/7: ${fileName}`);
+  }
+  return urls;
+}
+
+// ── Instagram 캐러셀 발행 ──────────────────────────────────────────
+async function postInstagramCarousel(imageUrls, caption) {
+  const token  = INSTAGRAM_ACCESS_TOKEN;
+  const userId = INSTAGRAM_BUSINESS_ACCOUNT_ID;
+  const base   = `https://graph.instagram.com/v21.0`;
+
+  // 1. 이미지 컨테이너 생성
+  const containerIds = [];
+  for (const url of imageUrls) {
+    const res = await fetch(`${base}/${userId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: token }),
+    });
+    const data = await res.json();
+    if (!data.id) throw new Error(`IG 이미지 컨테이너 실패: ${JSON.stringify(data)}`);
+    containerIds.push(data.id);
+    console.log(`  📦 IG 컨테이너: ${data.id}`);
+  }
+
+  // 2. 캐러셀 컨테이너 생성
+  const carRes = await fetch(`${base}/${userId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_type: 'CAROUSEL',
+      children: containerIds.join(','),
+      caption: caption.slice(0, 2200),
+      access_token: token,
+    }),
+  });
+  const carData = await carRes.json();
+  if (!carData.id) throw new Error(`IG 캐러셀 생성 실패: ${JSON.stringify(carData)}`);
+
+  // 3. 발행
+  const pubRes = await fetch(`${base}/${userId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creation_id: carData.id, access_token: token }),
+  });
+  const pubData = await pubRes.json();
+  if (!pubData.id) throw new Error(`IG 캐러셀 발행 실패: ${JSON.stringify(pubData)}`);
+  console.log(`✅ Instagram 캐러셀 발행: ${pubData.id}`);
+  return pubData.id;
+}
+
 // ── Instagram 릴스 발행 ────────────────────────────────────────────
 async function postInstagramReel(videoUrl, caption) {
   const token = INSTAGRAM_ACCESS_TOKEN;
@@ -382,58 +546,92 @@ asyncio.run(main())
   // ── 3. 슬라이드 영상 생성 ─────────────────────────────────────
   await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl);
 
-  // ── 4. Supabase Storage 업로드 ────────────────────────────────
-  console.log('\n☁️  Supabase 업로드 중...');
+  // ── 4. Supabase Storage 업로드 (영상) ───────────────────────────
+  console.log('\n☁️  Supabase 영상 업로드 중...');
   const videoUrl = await withRetry('Supabase 업로드', () => uploadToSupabase('output.mp4'));
 
-  // ── 5. 플랫폼 발행 (병렬) ─────────────────────────────────────
+  // ── 4b. 인스타 캐러셀 이미지 생성 + 업로드 ────────────────────
+  console.log('\n🖼️  인스타 캐러셀 이미지 생성 중 (7장)...');
+  const igSlides = parseIGSlides(SCRIPT_IG_SLIDES || '', toolName);
+  const igImagePaths = await generateCarouselImages(igSlides, toolName);
+  const igImageUrls  = await uploadCarouselToSupabase(igImagePaths);
+  console.log(`✅ 캐러셀 이미지 ${igImageUrls.length}장 업로드 완료`);
+
+  // ── 5. 플랫폼 발행 (순차: Instagram → YouTube → Facebook) ──────
   console.log('\n📤 플랫폼 발행 중...');
-  const caption = `${scriptText.slice(0, 2100)}\n\n#AI툴 #오늘의AI #새로운AI #AI추천 #인공지능`;
 
-  const [igResult, fbResult, ytResult] = await Promise.allSettled([
-    withRetry('Instagram 릴스', () => postInstagramReel(videoUrl, caption)),
-    withRetry('Facebook 릴스',  () => postFacebookReel(videoUrl, caption)),
-    (async () => {
-      const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
-      auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
-      const youtube = google.youtube({ version: 'v3', auth });
-      const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI'];
-      const res = await youtube.videos.insert({
-        part: ['snippet', 'status'],
-        requestBody: {
-          snippet: {
-            title: shortsTitle,
-            description: `${scriptText.slice(0, 450)}\n\n#Shorts #AI툴 #오늘의AI`,
-            tags: allTags,
-            categoryId: '28',
-            defaultLanguage: 'ko',
-          },
-          status: { privacyStatus: 'public' },
+  // 인스타 캐러셀 캡션 — 링크 금지, 바이오 안내만
+  const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')}`;
+  const igCaption = `${igSlides.s1}\n\n${igSlides.s2}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
+
+  // 페이스북 캡션 — 툴 URL 포함 가능
+  const fbCaption = `${scriptText.slice(0, 400)}\n\n🔗 ${toolUrl}\n\n#AI툴 #오늘의AI`.slice(0, 2200);
+
+  // ── Instagram ─────────────────────────────────────────────
+  let igStatus;
+  try {
+    await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCaption));
+    igStatus = '✅';
+    await tg(`📸 Instagram 발행 완료\n🔧 툴: ${toolName}`);
+  } catch (e) {
+    igStatus = `❌ ${e.message?.slice(0, 60)}`;
+    await tg(`⚠️ Instagram 실패\n${igStatus}`);
+  }
+
+  // ── YouTube ───────────────────────────────────────────────
+  let ytStatus;
+  try {
+    const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
+    auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
+    const youtube = google.youtube({ version: 'v3', auth });
+    const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI'];
+    const ytDesc = `${scriptText.slice(0, 400)}\n\n🔗 ${toolUrl}\n\n#Shorts #AI툴 #오늘의AI`;
+    const res = await youtube.videos.insert({
+      part: ['snippet', 'status'],
+      requestBody: {
+        snippet: {
+          title: shortsTitle,
+          description: ytDesc,
+          tags: allTags,
+          categoryId: '28',
+          defaultLanguage: 'ko',
         },
-        media: { body: fs.createReadStream('output.mp4') },
-      });
-      const url = `https://youtu.be/${res.data.id}`;
-      console.log(`✅ YouTube Shorts 업로드: ${url}`);
-      return url;
-    })(),
-  ]);
+        status: { privacyStatus: 'public' },
+      },
+      media: { body: fs.createReadStream('output.mp4') },
+    });
+    const ytUrl = `https://youtu.be/${res.data.id}`;
+    console.log(`✅ YouTube Shorts 업로드: ${ytUrl}`);
+    ytStatus = `✅ ${ytUrl}`;
+    await tg(`▶️ YouTube 업로드 완료\n${ytUrl}`);
+  } catch (e) {
+    ytStatus = `❌ ${e.message?.slice(0, 60)}`;
+    await tg(`⚠️ YouTube 실패\n${ytStatus}`);
+  }
 
-  const igStatus = igResult.status === 'fulfilled' ? '✅' : `❌ ${igResult.reason?.message?.slice(0, 60)}`;
-  const fbStatus = fbResult.status === 'fulfilled' ? '✅' : `❌ ${fbResult.reason?.message?.slice(0, 60)}`;
-  const ytStatus = ytResult.status === 'fulfilled' ? `✅ ${ytResult.value}` : `❌ ${ytResult.reason?.message?.slice(0, 60)}`;
+  // ── Facebook ──────────────────────────────────────────────
+  let fbStatus;
+  try {
+    await withRetry('Facebook 릴스', () => postFacebookReel(videoUrl, fbCaption));
+    fbStatus = '✅';
+    await tg(`📘 Facebook 발행 완료`);
+  } catch (e) {
+    fbStatus = `❌ ${e.message?.slice(0, 60)}`;
+    await tg(`⚠️ Facebook 실패\n${fbStatus}`);
+  }
 
   // ── 6. 임시 파일 정리 ─────────────────────────────────────────
   ['audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'output.mp4'].forEach(f => {
     try { fs.unlinkSync(f); } catch {}
   });
 
-  // ── 7. Telegram 결과 ──────────────────────────────────────────
+  // ── 7. Telegram 최종 요약 ─────────────────────────────────────
   await tg(
     `🎬 NOVA 영상 발행 완료\n` +
     `🔧 툴: ${toolName}\n` +
     `📸 Instagram: ${igStatus}\n` +
-    `📘 Facebook: ${fbStatus}\n` +
-    `▶️  YouTube Shorts: ${ytStatus}`
+    `▶️  YouTube Shorts: ${ytStatus}\n` +
+    `📘 Facebook: ${fbStatus}`
   );
   console.log('\n✅ 모든 발행 완료');
 }

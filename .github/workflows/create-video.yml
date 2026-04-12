@@ -21,7 +21,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +57,7 @@ jobs:
           SCRIPT_COMPARE: ${{ github.event.client_payload.compare_with || '' }}
           SCRIPT_COMBO: ${{ github.event.client_payload.combo_tip || '' }}
           SCRIPT_TOOL_URL: ${{ github.event.client_payload.tool_url || '' }}
+          SCRIPT_IG_SLIDES: ${{ github.event.client_payload.ig_slides || '' }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
