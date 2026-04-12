@@ -3,6 +3,7 @@
     { "path": "/api/healthcheck?notify=1", "schedule": "0 0 * * *" },
     { "path": "/api/weekly-report", "schedule": "0 0 * * 1" },
     { "path": "/api/refresh-token", "schedule": "0 0 15 * *" },
-    { "path": "/api/retry-publish", "schedule": "0 2,4,6,8 * * *" }
+    { "path": "/api/retry-publish", "schedule": "0 2,4,6,8 * * *" },
+    { "path": "/api/kmong-monitor", "schedule": "0 0-13 * * *" }
   ]
 }
