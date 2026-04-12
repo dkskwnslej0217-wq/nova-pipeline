@@ -301,14 +301,12 @@ async function generateCarouselImages(slides, toolName) {
   const paths = [];
 
   for (let i = 0; i < 7; i++) {
-    const html    = makeSlideHTML(i + 1, 7, slides[keys[i]] || '', toolName, types[i]);
-    const htmlOut = `/tmp/ig_slide_${i}.html`;
-    const imgOut  = `/tmp/ig_carousel_${i}.png`;
-    fs.writeFileSync(htmlOut, html);
+    const html   = makeSlideHTML(i + 1, 7, slides[keys[i]] || '', toolName, types[i]);
+    const imgOut = `/tmp/ig_carousel_${i}.png`;
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1080, height: 1080 });
-    await page.goto(`file://${htmlOut}`, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.screenshot({ path: imgOut, type: 'png' });
     await page.close();
 
