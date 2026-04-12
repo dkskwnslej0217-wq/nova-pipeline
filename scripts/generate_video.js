@@ -230,6 +230,11 @@ function parseIGSlides(raw, toolName) {
     result[`s${i}`] = m ? m[1].trim() : '';
   }
   if (!result.s1) result.s1 = `오늘의 AI 툴: ${toolName}`;
+  if (!result.s2) result.s2 = `${toolName}이 뭔지 몰랐다면 이미 손해`;
+  if (!result.s3) result.s3 = `핵심 기능: 반복 작업을 AI가 자동으로 처리`;
+  if (!result.s4) result.s4 = `장점: 무료로 바로 시작 가능, 설치 필요 없음`;
+  if (!result.s5) result.s5 = `단점: 무료 플랜은 사용량 제한 있음`;
+  if (!result.s6) result.s6 = `추천: 시간 아끼고 싶은 직장인 / 비추천: 고급 커스터마이징 필요한 분`;
   if (!result.s7) result.s7 = '지금 무료로 시작 가능 → 링크는 바이오 참고 🔗';
   return result;
 }

@@ -8,15 +8,23 @@ on:
       text:
         description: '스크립트 텍스트'
         required: false
-        default: 'AI 자동화 테스트 영상입니다.'
+        default: '오늘 소개할 AI 툴은 Perplexity AI입니다. ChatGPT와 다르게 실시간 검색 결과를 출처와 함께 보여줘요. 리서치할 때 시간을 절반으로 줄여줍니다. 무료로 바로 시작할 수 있어요.'
       title:
         description: '영상 제목'
         required: false
-        default: 'NOVA AI 테스트'
+        default: '오늘의 AI 툴: Perplexity AI'
       tags:
         description: '태그'
         required: false
-        default: 'AI,자동화,테스트'
+        default: 'AI,자동화,Perplexity'
+      tool_name:
+        description: '툴 이름'
+        required: false
+        default: 'Perplexity AI'
+      ig_slides:
+        description: 'IG 슬라이드 내용 ([S1]~[S7] 형식)'
+        required: false
+        default: '[S1] Perplexity AI — ChatGPT보다 검색이 빠른 AI [S2] ChatGPT로 검색하면 출처가 없어서 불안하죠? [S3] 실시간 웹 검색 + AI 답변을 동시에 제공해요 [S4] 출처 포함 답변으로 신뢰도 높은 리서치 가능 [S5] 단점은 무료 플랜 하루 사용량 제한이 있어요 [S6] 추천: 리서치·공부하는 분 / 비추천: 창작 글쓰기 위주인 분 [S7] 지금 무료로 시작 가능 → 링크는 바이오 참고 🔗'
 
 jobs:
   build:
@@ -53,11 +61,11 @@ jobs:
           SCRIPT_TEXT: ${{ github.event.client_payload.text || github.event.inputs.text }}
           SCRIPT_TITLE: ${{ github.event.client_payload.title || github.event.inputs.title }}
           SCRIPT_TAGS: ${{ github.event.client_payload.tags || github.event.inputs.tags }}
-          SCRIPT_TOOL_NAME: ${{ github.event.client_payload.tool_name || '' }}
+          SCRIPT_TOOL_NAME: ${{ github.event.client_payload.tool_name || github.event.inputs.tool_name || '' }}
           SCRIPT_COMPARE: ${{ github.event.client_payload.compare_with || '' }}
           SCRIPT_COMBO: ${{ github.event.client_payload.combo_tip || '' }}
           SCRIPT_TOOL_URL: ${{ github.event.client_payload.tool_url || '' }}
-          SCRIPT_IG_SLIDES: ${{ github.event.client_payload.ig_slides || '' }}
+          SCRIPT_IG_SLIDES: ${{ github.event.client_payload.ig_slides || github.event.inputs.ig_slides || '' }}
           GOOGLE_TTS_KEY: ${{ secrets.GOOGLE_TTS_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
