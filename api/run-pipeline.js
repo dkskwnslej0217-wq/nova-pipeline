@@ -387,6 +387,36 @@ YouTube Shorts 나레이션 작성:
   };
 }
 
+// ─── 14b-2: Gemini 툴 상세 분석 (슬라이드 퀄리티 향상용) ─────
+async function analyzeToolDetails(toolName, compareWith) {
+  const prompt = `AI 툴 "${toolName}"에 대해 아래 형식으로 정확하게 답해줘. 모르면 추측하지 말고 빈칸.
+
+기능1: [가장 핵심 기능, 20자 이내]
+기능2: [두 번째 기능, 20자 이내]
+기능3: [세 번째 기능, 20자 이내]
+가격: [무료 플랜 유무 + 유료 플랜 가격 요약, 25자]
+${compareWith}와차이: [핵심 차이 1가지, 25자]
+단점: [솔직한 단점 1가지, 20자]
+추천대상: [이런 사람에게 딱, 20자]
+사용예시입력: [실제 입력 예시, 25자]
+사용예시출력: [기대 결과 예시, 25자]
+공식URL: [https://로 시작하는 정확한 URL, 모르면 빈칸]`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    );
+    if (!res.ok) return '';
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  } catch { return ''; }
+}
+
 // ─── 14c: Groq 훅 초안 ───────────────────────────────────
 async function generateHooks(keywords) {
   // keywords 형식: "툴이름|||설명|||대상|||무료/유료|||비교툴"
@@ -411,7 +441,7 @@ async function generateHooks(keywords) {
 }
 
 // ─── 14d: 최종 완성 (1번 Groq 호출 → 3개 플랫폼 동시 생성) ──
-async function finalizeContent(keywords, hooks) {
+async function finalizeContent(keywords, hooks, toolDetails = '') {
   // keywords 형식: "툴이름|||설명|||대상|||무료/유료|||비교툴"
   const parts = keywords.split('|||');
   const toolName    = parts[0]?.trim() || 'AI 툴';
@@ -420,8 +450,12 @@ async function finalizeContent(keywords, hooks) {
   const toolPrice   = parts[3]?.trim() || '';
   const compareWith = parts[4]?.trim() || 'ChatGPT';
 
+  const detailsSection = toolDetails
+    ? `\n\n[${toolName} 실제 정보 — 이 내용 기반으로 슬라이드 작성]\n${toolDetails}`
+    : '';
+
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
-  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}
+  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}${detailsSection}
 금지어: "안녕하세요" "여러분" "오늘은" "확실히" "물론" "정말"
 
 아래 구분자 그대로 작성:
@@ -719,12 +753,20 @@ export default async function handler(req, res) {
     const channelPost = formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTrends, keywords);
     postChannel(channelPost); // 비동기, 실패해도 파이프라인 계속
 
+    // 14b-2 Gemini 툴 상세 분석 (슬라이드용 실제 정보 수집)
+    const toolNameForAnalysis = keywords.split('|||')[0]?.trim() || 'AI 툴';
+    const compareForAnalysis  = keywords.split('|||')[4]?.trim() || 'ChatGPT';
+    const toolDetails = await analyzeToolDetails(toolNameForAnalysis, compareForAnalysis);
+    // 공식 URL 추출 (Gemini가 "공식URL: https://..." 형식으로 반환)
+    const urlMatch = toolDetails.match(/공식URL:\s*(https?:\/\/[^\s]+)/);
+    const officialUrl = urlMatch?.[1] || '';
+
     // 14c Groq
     const hooksRaw = await generateHooks(keywords);
     const hooks = filterKoreanOnly(hooksRaw);
 
     // 14d 콘텐츠 생성 (플랫폼별)
-    const { igText, fbText, ytText, imagePrompt: groqImagePrompt, compareText, comboText } = await finalizeContent(keywords, hooks);
+    const { igText, fbText, ytText, imagePrompt: groqImagePrompt, compareText, comboText } = await finalizeContent(keywords, hooks, toolDetails);
     const igRaw  = filterKoreanOnly(igText);
     const fbFinal = filterKoreanOnly(fbText);
     const ytFinal = filterKoreanOnly(ytText);
@@ -784,8 +826,8 @@ export default async function handler(req, res) {
               tool_name:    toolName,
               compare_with: keywords.split('|||')[4]?.trim() || '',
               combo_tip:    comboText || '',
-              tool_url:     `https://www.${toolName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.ai`,
-              ig_slides:    igText || '',
+              tool_url:     officialUrl || `https://www.${toolName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.ai`,
+              ig_slides:    igFinal || igText || '',
             },
           }),
         }
