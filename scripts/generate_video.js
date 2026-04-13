@@ -694,14 +694,14 @@ asyncio.run(main())
           retryCount: igRetryCount + 1,
         });
         if (isRateLimited) {
-          await tg(`⏸️ Instagram API 한도 초과 — 오늘 재시도 중단\n내일 자동 재시작됩니다.\n에러: ${errMsg.slice(0, 80)}`);
-          throw new Error('Instagram API 한도 초과 — 파이프라인 중단');
+          await tg(`⏸️ Instagram API 한도 초과 — 오늘 스킵\n내일 자동 재시작됩니다.\n에러: ${errMsg.slice(0, 80)}`);
+          // throw 안 함 — YouTube는 계속 실행
+        } else if (isBanned) {
+          await tg(`🚨 Instagram 차단/제한 감지! junho 확인 필요.\n에러: ${errMsg.slice(0, 100)}`);
+          // throw 안 함 — YouTube는 계속 실행
+        } else {
+          await tg(`⚠️ Instagram 실패\n${igStatus}`);
         }
-        if (isBanned) {
-          await tg(`🚨 Instagram 차단/제한 감지!\n즉시 중단합니다. junho 확인 필요.\n에러: ${errMsg.slice(0, 100)}`);
-          throw new Error('Instagram 차단 감지 — 파이프라인 중단');
-        }
-        await tg(`⚠️ Instagram 실패\n${igStatus}`);
       }
     }
   }
