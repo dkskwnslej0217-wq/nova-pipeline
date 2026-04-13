@@ -808,7 +808,24 @@ export default async function handler(req, res) {
       }
     } catch { /* 체크 실패는 무시 */ }
 
-    // GitHub Actions 영상 파이프라인 트리거
+    // GitHub Actions 영상 파이프라인 트리거 — 오늘 이미 발행됐으면 스킵
+    const todayKst = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    let alreadyPublished = false;
+    try {
+      const logRes = await fetch(
+        `${SUPA_URL}/rest/v1/publish_log?date=eq.${todayKst}&platform=eq.instagram&status=eq.success&select=id`,
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+      );
+      const logData = await logRes.json();
+      if (Array.isArray(logData) && logData.length > 0) {
+        alreadyPublished = true;
+        videoStatus = '✅ (오늘 이미 발행됨, 스킵)';
+      }
+    } catch { /* 체크 실패 시 그냥 트리거 */ }
+
+    if (alreadyPublished) {
+      await tg(`⏭️ 오늘 Instagram 이미 발행됨 — 영상 파이프라인 스킵`);
+    } else
     try {
       const dispatchRes = await fetch(
         `https://api.github.com/repos/${GITHUB_REPO}/dispatches`,
