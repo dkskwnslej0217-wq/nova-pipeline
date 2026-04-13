@@ -155,12 +155,14 @@ async function saveTrends(hnTrends, ghTrends, redditTrends) {
 async function fetchTrendSources() {
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
   const res = await fetch(
-    `${SUPA_URL}/rest/v1/trend_sources?date=eq.${today}&source=neq.groq_summary&select=source,title,description&order=score.desc&limit=20`,
+    `${SUPA_URL}/rest/v1/trend_sources?date=eq.${today}&select=source,title,description&order=score.desc&limit=20`,
     { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
   );
   if (!res.ok) return [];
   const rows = await res.json();
-  return rows.map(r => r.title + (r.description ? `: ${r.description.slice(0, 80)}` : ''));
+  return rows
+    .filter(r => r.source !== 'groq_summary')
+    .map(r => r.title + (r.description ? `: ${r.description.slice(0, 80)}` : ''));
 }
 
 // ─── Product Hunt AI 신제품 (API 키 불필요) ───────────────
