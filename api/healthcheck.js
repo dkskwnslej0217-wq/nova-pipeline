@@ -117,7 +117,11 @@ const CHECKS = [
 
 export default async function handler(req) {
   const url = new URL(req.url);
-  // 헬스체크는 토큰값 노출 없이 상태만 반환하므로 인증 불필요
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1';
+  const secret = url.searchParams.get('secret') ?? '';
+  if (!isVercelCron && secret !== (process.env.PIPELINE_SECRET ?? '')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'content-type': 'application/json' } });
+  }
 
   const env = {
     SUPA_URL:         process.env.SUPABASE_URL,
