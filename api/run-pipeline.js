@@ -151,18 +151,22 @@ async function saveTrends(hnTrends, ghTrends, redditTrends) {
   });
 }
 
-// ─── crawlee-agent trend_sources 읽기 ────────────────────
-async function fetchTrendSources() {
-  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
-  const res = await fetch(
-    `${SUPA_URL}/rest/v1/trend_sources?date=eq.${today}&select=source,title,description&order=score.desc&limit=20`,
-    { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
-  );
-  if (!res.ok) return [];
-  const rows = await res.json();
-  return rows
-    .filter(r => r.source !== 'groq_summary')
-    .map(r => r.title + (r.description ? `: ${r.description.slice(0, 80)}` : ''));
+// ─── research-agent 결과 읽기 (오늘→어제 폴백) ──────────
+async function fetchResearchResult() {
+  const kst = new Date(Date.now() + 9 * 3600000);
+  const today = kst.toISOString().slice(0, 10);
+  const yesterday = new Date(kst - 86400000).toISOString().slice(0, 10);
+
+  for (const date of [today, yesterday]) {
+    const res = await fetch(
+      `${SUPA_URL}/rest/v1/research_results?date=eq.${date}&select=tool_name,one_liner,target,price,compare_tool,reason_kr&limit=1`,
+      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+    );
+    if (!res.ok) continue;
+    const rows = await res.json();
+    if (rows.length) return rows[0];
+  }
+  return null;
 }
 
 // ─── Product Hunt AI 신제품 (API 키 불필요) ───────────────
@@ -731,7 +735,7 @@ export default async function handler(req, res) {
 
   try {
     // 14a 트렌드 수집 + 메모리 조회 (병렬)
-    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, crawleeTrends] = await Promise.all([
+    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult] = await Promise.all([
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
       fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
@@ -740,7 +744,7 @@ export default async function handler(req, res) {
       fetchGoogleTrendsKR().catch(() => []),
       fetchProductHuntAI().catch(() => []),
       fetchRecentTopics().catch(() => ({ recent: [], topScored: [] })),
-      fetchTrendSources().catch(() => []),
+      fetchResearchResult().catch(() => null),
     ]);
     const trendSummary = [
       hnTrends.length     ? `🔥 HN:\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
@@ -752,19 +756,24 @@ export default async function handler(req, res) {
     ].filter(Boolean).join('\n\n');
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
 
-    // 14b Gemini — 오늘의 AI 툴 선정
+    // 14b 툴 선정 — research-agent 결과 우선, 없으면 Gemini
     let keywords;
-    try {
-      keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored, crawleeTrends);
-      // 형식 검증: "툴이름|||설명|||대상|||가격" 형태인지 확인
-      if (!keywords.includes('|||')) {
-        // 폴백: phTrends 첫 번째 항목 사용
-        const fallbackTool = phTrends[0] || hnTrends[0] || 'Perplexity AI';
-        keywords = `${fallbackTool}|||AI 검색 및 리서치 도구|||리서치·공부하는 사람|||무료`;
+    if (researchResult) {
+      // research-agent가 이미 분석한 결과 사용 (Gemini 호출 없음)
+      keywords = `${researchResult.tool_name}|||${researchResult.one_liner}|||${researchResult.target}|||${researchResult.price}|||${researchResult.compare_tool}`;
+      console.log(`✅ research-agent 결과 사용: ${researchResult.tool_name}`);
+    } else {
+      // 폴백: 기존 Gemini 툴 선정
+      try {
+        keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored);
+        if (!keywords.includes('|||')) {
+          const fallbackTool = phTrends[0] || hnTrends[0] || 'Perplexity AI';
+          keywords = `${fallbackTool}|||AI 검색 및 리서치 도구|||리서치·공부하는 사람|||무료`;
+        }
+      } catch(e) {
+        await tg(`⚠️ Gemini 실패 → 기본 툴 사용\n${e.message}`);
+        keywords = 'Perplexity AI|||실시간 검색 + AI 답변 통합|||리서치하는 모든 사람|||무료';
       }
-    } catch(e) {
-      await tg(`⚠️ Gemini 실패 → 기본 툴 사용\n${e.message}`);
-      keywords = 'Perplexity AI|||실시간 검색 + AI 답변 통합|||리서치하는 모든 사람|||무료';
     }
 
     // 텔레그램 채널 발행 (트렌드 다이제스트)
