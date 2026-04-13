@@ -119,7 +119,8 @@ export default async function handler(req) {
   const url = new URL(req.url);
   const isVercelCron = req.headers.get('x-vercel-cron') === '1';
   const secret = url.searchParams.get('secret') ?? '';
-  if (!isVercelCron && secret !== process.env.ALERT_SECRET) {
+  const validSecret = process.env.PIPELINE_SECRET || process.env.ALERT_SECRET;
+  if (!isVercelCron && secret !== validSecret) {
     return new Response('Unauthorized', { status: 401 });
   }
 
