@@ -682,12 +682,21 @@ asyncio.run(main())
         const isBanned = errMsg.includes('190') || errMsg.includes('368') ||
                          errMsg.includes('32') || errMsg.includes('spam') ||
                          errMsg.includes('blocked') || errMsg.includes('restricted');
+        const isRateLimited = errMsg.toLowerCase().includes('request limit reached') ||
+                              errMsg.toLowerCase().includes('rate limit') ||
+                              errMsg.includes('4'); // IG 에러코드 4 = app rate limit
         igStatus = `❌ ${errMsg.slice(0, 60)}`;
-        await upsertPublishLog(today, 'instagram', 'failed', {
+        // 한도 초과는 오늘 재시도 금지 (rate_limited 상태로 저장)
+        const logStatus = isRateLimited ? 'rate_limited' : 'failed';
+        await upsertPublishLog(today, 'instagram', logStatus, {
           errorMsg: errMsg.slice(0, 200),
           content: { imageUrls: igImageUrls, caption: igCaption },
           retryCount: igRetryCount + 1,
         });
+        if (isRateLimited) {
+          await tg(`⏸️ Instagram API 한도 초과 — 오늘 재시도 중단\n내일 자동 재시작됩니다.\n에러: ${errMsg.slice(0, 80)}`);
+          throw new Error('Instagram API 한도 초과 — 파이프라인 중단');
+        }
         if (isBanned) {
           await tg(`🚨 Instagram 차단/제한 감지!\n즉시 중단합니다. junho 확인 필요.\n에러: ${errMsg.slice(0, 100)}`);
           throw new Error('Instagram 차단 감지 — 파이프라인 중단');
