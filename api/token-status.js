@@ -39,11 +39,18 @@ export default async function handler(req, res) {
       'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
       { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
     );
+    // 스코프 확인
+    const scopeRes = await fetch(
+      `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${tokenData.access_token}`
+    );
+    const scopeData = await scopeRes.json();
+    const scopes = scopeData.scope || '스코프 없음';
+
     const chData = await chRes.json();
-    if (chData.error) throw new Error(`채널 API 오류: ${chData.error.code} ${chData.error.message}`);
+    if (chData.error) throw new Error(`채널 API 오류: ${chData.error.code} — 현재 스코프: ${scopes}`);
     const title = chData.items?.[0]?.snippet?.title;
-    if (!title) throw new Error(`채널 없음 (items: ${JSON.stringify(chData.items)})`);
-    results.push({ platform: 'YouTube', ok: true, msg: `"${title}" 정상` });
+    if (!title) throw new Error(`채널 없음 — 스코프: ${scopes}`);
+    results.push({ platform: 'YouTube', ok: true, msg: `"${title}" 정상 | 스코프: ${scopes}` });
   } catch (e) {
     results.push({ platform: 'YouTube', ok: false, msg: e.message });
   }
