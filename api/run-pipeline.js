@@ -627,6 +627,7 @@ export default async function handler(req, res) {
   const secret = req.headers['x-pipeline-secret'];
   const isCron = req.headers['x-vercel-cron'] === '1';
   if (!isCron && secret !== PIPELINE_SECRET) {
+    await tg(`🚨 파이프라인 401 — 시크릿 불일치\nMake.com 헤더 설정 확인 필요`);
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -650,6 +651,7 @@ export default async function handler(req, res) {
   } catch(e) {
     // Supabase 접근 불가 → 안전하게 중단 (계속 진행 금지)
     console.error('락 체크 실패 — 파이프라인 중단:', e.message);
+    await tg(`🚨 파이프라인 중단 — Supabase 락 체크 실패\n${e.message}`);
     return res.status(503).json({ ok: false, error: '락 체크 실패 — 재시도 금지' });
   }
   if (!Array.isArray(lockInserted) || lockInserted.length === 0) {

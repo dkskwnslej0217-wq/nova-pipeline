@@ -199,9 +199,9 @@ export default async function handler() {
         await updateLog(today, platform, 'success', { postId, retryCount: retry_count + 1 });
         await tg(`✅ instagram 자동 재시도 성공 (${retry_count + 1}번째 시도)`);
       } else if (platform === 'facebook') {
-        postId = await retryFacebook(content, retry_count);
-        await updateLog(today, platform, 'success', { postId, retryCount: retry_count + 1 });
-        await tg(`✅ facebook 자동 재시도 성공 (${retry_count + 1}번째 시도)`);
+        // 🔴 Facebook 차단 해제 대기 중 — 재시도 비활성화
+        results[platform] = 'disabled (차단 해제 대기)';
+        continue;
       } else if (platform === 'youtube') {
         // GitHub Actions에 dispatch → 완료는 retry_youtube.js가 직접 DB 업데이트
         await retryYouTube(content, today);
@@ -210,14 +210,21 @@ export default async function handler() {
       }
       results[platform] = 'dispatched_or_success';
     } catch (e) {
+      const errMsg = e.message || '';
+      // 차단/토큰 만료 감지 — 재시도해도 소용없음, 즉시 중단
+      const isBanned = errMsg.includes('190') || errMsg.includes('368') ||
+                       errMsg.includes('32') || errMsg.includes('spam') ||
+                       errMsg.includes('blocked') || errMsg.includes('restricted');
       await updateLog(today, platform, 'failed', {
-        errorMsg: e.message?.slice(0, 200),
+        errorMsg: errMsg.slice(0, 200),
         retryCount: retry_count + 1,
       });
-      results[platform] = `failed: ${e.message?.slice(0, 60)}`;
+      results[platform] = `failed: ${errMsg.slice(0, 60)}`;
 
-      if (retry_count + 1 >= 3) {
-        await tg(`❌ ${platform} 3회 재시도 모두 실패 — 수동 확인 필요\n오류: ${e.message?.slice(0, 100)}`);
+      if (isBanned) {
+        await tg(`🚨 ${platform} 차단/토큰 만료 감지!\n재시도 중단. junho 수동 확인 필요.\n에러: ${errMsg.slice(0, 100)}`);
+      } else if (retry_count + 1 >= 3) {
+        await tg(`❌ ${platform} 3회 재시도 모두 실패 — 수동 확인 필요\n오류: ${errMsg.slice(0, 100)}`);
       }
     }
   }

@@ -640,7 +640,8 @@ asyncio.run(main())
   const igImageUrls  = await uploadCarouselToSupabase(igImagePaths);
   console.log(`✅ 캐러셀 이미지 ${igImageUrls.length}장 업로드 완료`);
 
-  // ── 5. 플랫폼 발행 (순차: Instagram → YouTube → Facebook) ──────
+  // ── 5. 플랫폼 발행 (순차: Instagram → YouTube) ──────────────
+  // ⚠️ Facebook: 차단 해제 대기 중 — 비활성화 (재활성화 전 junho 확인 필요)
   console.log('\n📤 플랫폼 발행 중...');
   const today = kstDate();
 
@@ -648,8 +649,10 @@ asyncio.run(main())
   const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')}`;
   const igCaption = `${igSlides.s1}\n\n${igSlides.s2}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
 
-  // 페이스북 캡션 — 툴 URL 포함 가능
-  const fbCaption = `${scriptText.slice(0, 400)}\n\n🔗 ${toolUrl}\n\n#AI툴 #오늘의AI`.slice(0, 2200);
+  // 사람처럼 보이도록 발행 전 랜덤 딜레이 (30~90초)
+  const humanDelay = Math.floor(Math.random() * 60000) + 30000;
+  console.log(`⏳ 발행 전 대기 중 (${Math.round(humanDelay / 1000)}초)...`);
+  await new Promise(r => setTimeout(r, humanDelay));
 
   // ── Instagram ─────────────────────────────────────────────
   let igStatus;
@@ -659,23 +662,38 @@ asyncio.run(main())
     console.log('⏭️ Instagram 이미 발행됨 — 스킵');
   } else {
     const igRetryCount = (igLog?.retry_count || 0);
-    try {
-      const igPostId = await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCaption));
-      igStatus = '✅';
-      await upsertPublishLog(today, 'instagram', 'success', {
-        postId: igPostId,
-        content: { imageUrls: igImageUrls, caption: igCaption },
-        retryCount: igRetryCount,
-      });
-      await tg(`📸 Instagram 발행 완료\n🔧 툴: ${toolName}`);
-    } catch (e) {
-      igStatus = `❌ ${e.message?.slice(0, 60)}`;
-      await upsertPublishLog(today, 'instagram', 'failed', {
-        errorMsg: e.message?.slice(0, 200),
-        content: { imageUrls: igImageUrls, caption: igCaption },
-        retryCount: igRetryCount,
-      });
-      await tg(`⚠️ Instagram 실패 (자동 재시도 예정)\n${igStatus}`);
+    // Instagram 하루 발행 횟수 제한 (1회 초과 시 차단 위험)
+    if (igRetryCount >= 3) {
+      igStatus = '⏸️ (재시도 한도 초과 — 내일 재시작)';
+      await tg(`⚠️ Instagram 재시도 한도 초과 (${igRetryCount}회)\n오늘은 발행 중단. 내일 자동 재시작.`);
+    } else {
+      try {
+        const igPostId = await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCaption), 1, 30000);
+        igStatus = '✅';
+        await upsertPublishLog(today, 'instagram', 'success', {
+          postId: igPostId,
+          content: { imageUrls: igImageUrls, caption: igCaption },
+          retryCount: igRetryCount,
+        });
+        await tg(`📸 Instagram 발행 완료\n🔧 툴: ${toolName}`);
+      } catch (e) {
+        const errMsg = e.message || '';
+        // 차단/스팸 감지 에러코드 — 즉시 중단 (재시도 금지)
+        const isBanned = errMsg.includes('190') || errMsg.includes('368') ||
+                         errMsg.includes('32') || errMsg.includes('spam') ||
+                         errMsg.includes('blocked') || errMsg.includes('restricted');
+        igStatus = `❌ ${errMsg.slice(0, 60)}`;
+        await upsertPublishLog(today, 'instagram', 'failed', {
+          errorMsg: errMsg.slice(0, 200),
+          content: { imageUrls: igImageUrls, caption: igCaption },
+          retryCount: igRetryCount + 1,
+        });
+        if (isBanned) {
+          await tg(`🚨 Instagram 차단/제한 감지!\n즉시 중단합니다. junho 확인 필요.\n에러: ${errMsg.slice(0, 100)}`);
+          throw new Error('Instagram 차단 감지 — 파이프라인 중단');
+        }
+        await tg(`⚠️ Instagram 실패\n${igStatus}`);
+      }
     }
   }
 
@@ -723,36 +741,15 @@ asyncio.run(main())
         content: { videoUrl, title: shortsTitle, description: ytDesc, tags: allTags },
         retryCount: ytRetryCount,
       });
-      await tg(`⚠️ YouTube 실패 (자동 재시도 예정)\n${ytStatus}`);
+      await tg(`⚠️ YouTube 실패\n${ytStatus}`);
     }
   }
 
   // ── Facebook ──────────────────────────────────────────────
-  let fbStatus;
-  const fbLog = await getPublishLog(today, 'facebook');
-  if (fbLog?.status === 'success') {
-    fbStatus = '✅ (이미 발행됨, 스킵)';
-    console.log('⏭️ Facebook 이미 발행됨 — 스킵');
-  } else {
-    const fbRetryCount = (fbLog?.retry_count || 0);
-    try {
-      await withRetry('Facebook 릴스', () => postFacebookReel(videoUrl, fbCaption));
-      fbStatus = '✅';
-      await upsertPublishLog(today, 'facebook', 'success', {
-        content: { videoUrl, caption: fbCaption },
-        retryCount: fbRetryCount,
-      });
-      await tg(`📘 Facebook 발행 완료`);
-    } catch (e) {
-      fbStatus = `❌ ${e.message?.slice(0, 60)}`;
-      await upsertPublishLog(today, 'facebook', 'failed', {
-        errorMsg: e.message?.slice(0, 200),
-        content: { videoUrl, caption: fbCaption },
-        retryCount: fbRetryCount,
-      });
-      await tg(`⚠️ Facebook 실패 (자동 재시도 예정)\n${fbStatus}`);
-    }
-  }
+  // 🔴 차단 해제 대기 중 — 비활성화
+  // 재활성화 조건: Facebook Business Suite에서 제한 해제 확인 후 junho가 직접 주석 제거
+  const fbStatus = '⏸️ 비활성화 (차단 해제 대기 중)';
+  console.log('⏭️ Facebook 발행 비활성화 — 차단 해제 대기 중');
 
   // ── 6. 임시 파일 정리 ─────────────────────────────────────────
   ['audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'output.mp4'].forEach(f => {
@@ -765,7 +762,8 @@ asyncio.run(main())
     `🔧 툴: ${toolName}\n` +
     `📸 Instagram: ${igStatus}\n` +
     `▶️  YouTube Shorts: ${ytStatus}\n` +
-    `📘 Facebook: ${fbStatus}`
+    `📘 Facebook: ${fbStatus}\n` +
+    `⚠️ Facebook은 차단 해제 후 수동으로 재활성화 필요`
   );
   console.log('\n✅ 모든 발행 완료');
 }
