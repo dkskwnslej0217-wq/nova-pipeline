@@ -34,14 +34,15 @@ export default async function handler(req, res) {
       }),
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) throw new Error(`갱신 실패: ${tokenData.error}`);
+    if (!tokenData.access_token) throw new Error(`토큰 갱신 실패: ${JSON.stringify(tokenData)}`);
     const chRes = await fetch(
       'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
       { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
     );
     const chData = await chRes.json();
+    if (chData.error) throw new Error(`채널 API 오류: ${chData.error.code} ${chData.error.message}`);
     const title = chData.items?.[0]?.snippet?.title;
-    if (!title) throw new Error('채널 없음 — 토큰 만료 가능성');
+    if (!title) throw new Error(`채널 없음 (items: ${JSON.stringify(chData.items)})`);
     results.push({ platform: 'YouTube', ok: true, msg: `"${title}" 정상` });
   } catch (e) {
     results.push({ platform: 'YouTube', ok: false, msg: e.message });
