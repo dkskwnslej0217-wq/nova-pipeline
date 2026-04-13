@@ -68,11 +68,14 @@ async function refreshToken(cookieString) {
       'Origin': 'https://kmong.com',
     },
   });
-  if (!res.ok) throw new Error(`토큰 갱신 실패: ${res.status}`);
+  if (res.status >= 400) throw new Error(`토큰 갱신 실패: ${res.status}`);
   const setCookie = res.headers.get('set-cookie') || '';
-  const match = setCookie.match(/x-kmong-authorization=([^;]+)/);
-  if (!match) throw new Error('Set-Cookie에서 새 토큰 추출 실패');
-  return match[1];
+  const newMatch = setCookie.match(/x-kmong-authorization=([^;]+)/);
+  if (newMatch) return newMatch[1];
+  // Set-Cookie에 없으면 기존 쿠키에서 추출 (202 응답 등)
+  const existingMatch = cookieString.match(/x-kmong-authorization=([^;]+)/);
+  if (existingMatch) return existingMatch[1];
+  throw new Error('토큰 추출 실패 (Set-Cookie & 기존 쿠키 모두 없음)');
 }
 
 // ── 크몽 API 호출 ─────────────────────────────────────────
@@ -101,9 +104,10 @@ export default async function handler(req) {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const cookieString = process.env.KMONG_COOKIE_STRING;
+  // 쿠키 로드: Supabase 우선, 없으면 env 폴백
+  let cookieString = await kvGet('cookie_string') || process.env.KMONG_COOKIE_STRING;
   if (!cookieString) {
-    return new Response(JSON.stringify({ error: 'KMONG_COOKIE_STRING not set' }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'KMONG_COOKIE_STRING not set (Supabase & env 모두 없음)' }), { status: 500 });
   }
 
   try {
@@ -113,6 +117,10 @@ export default async function handler(req) {
       /x-kmong-authorization=[^;]*/g,
       `x-kmong-authorization=${accessToken}`
     );
+
+    // 갱신된 쿠키를 Supabase에 저장 (다음 실행 때 사용)
+    await kvSet('cookie_string', updatedCookies);
+    cookieString = updatedCookies;
 
     // 2. 병렬로 API 조회
     const [alarms, proposalsData, kmongNotifs] = await Promise.all([

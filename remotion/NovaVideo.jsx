@@ -8,7 +8,7 @@ import {
 import { C, FONT, PAD } from './theme.js';
 
 // ── 애니메이션 헬퍼 ───────────────────────────────────────────────
-function useFadeIn(delay = 0, dur = 20) {
+function useFadeIn(delay = 0, dur = 15) {
   const frame = useCurrentFrame();
   return interpolate(frame, [delay, delay + dur], [0, 1], {
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
@@ -18,20 +18,20 @@ function useFadeIn(delay = 0, dur = 20) {
 function useSlideUp(delay = 0) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const p = spring({ frame: frame - delay, fps, config: { damping: 100, stiffness: 200 } });
+  const p = spring({ frame: frame - delay, fps, config: { damping: 80, stiffness: 220 } });
   return {
     opacity: interpolate(p, [0, 1], [0, 1]),
-    transform: `translateY(${interpolate(p, [0, 1], [50, 0])}px)`,
+    transform: `translateY(${interpolate(p, [0, 1], [40, 0])}px)`,
   };
 }
 
 function useScaleIn(delay = 0) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const p = spring({ frame: frame - delay, fps, config: { damping: 120, stiffness: 250 } });
+  const p = spring({ frame: frame - delay, fps, config: { damping: 100, stiffness: 260 } });
   return {
     opacity: interpolate(p, [0, 1], [0, 1]),
-    transform: `scale(${interpolate(p, [0, 1], [0.85, 1])})`,
+    transform: `scale(${interpolate(p, [0, 1], [0.88, 1])})`,
   };
 }
 
@@ -158,7 +158,7 @@ export function Slide2({ toolName, bullets }) {
         </div>
 
         {bullets.slice(0, 3).map((b, i) => (
-          <FeatureCard key={i} text={b} icon={ICONS[i]} accent={ACCENTS[i]} delay={14 + i * 10} />
+          <FeatureCard key={i} text={b} icon={ICONS[i]} accent={ACCENTS[i]} delay={10 + i * 8} />
         ))}
       </div>
     </SlideWrap>
@@ -177,7 +177,7 @@ function FeatureCard({ text, icon, accent, delay }) {
       marginBottom: 32, display: 'flex', alignItems: 'center', gap: 32,
     }}>
       <span style={{ fontSize: 54, flexShrink: 0 }}>{icon}</span>
-      <span style={{ color: C.textPri, fontSize: 44, lineHeight: 1.45, wordBreak: 'keep-all' }}>{text}</span>
+      <span style={{ color: C.textPri, fontSize: 46, lineHeight: 1.5, wordBreak: 'keep-all' }}>{text}</span>
     </div>
   );
 }
@@ -264,7 +264,7 @@ export function Slide4({ toolName, steps }) {
         </div>
 
         {steps.slice(0, 3).map((step, i) => (
-          <StepCard key={i} num={i + 1} text={step} color={COLORS[i]} delay={14 + i * 10} />
+          <StepCard key={i} num={i + 1} text={step} color={COLORS[i]} delay={10 + i * 8} />
         ))}
       </div>
     </SlideWrap>
@@ -284,7 +284,7 @@ function StepCard({ num, text, color, delay }) {
       <div style={{
         flex: 1, background: C.card, border: `1px solid ${C.border}`,
         borderRadius: 20, padding: '28px 36px',
-        color: C.textPri, fontSize: 42, lineHeight: 1.5, wordBreak: 'keep-all',
+        color: C.textPri, fontSize: 44, lineHeight: 1.55, wordBreak: 'keep-all',
       }}>{text}</div>
     </div>
   );

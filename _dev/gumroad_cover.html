@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 600px;
+    height: 600px;
+    background: linear-gradient(135deg, #0d1117 0%, #1a1f2e 50%, #0d1117 100%);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .glow-top {
+    position: absolute;
+    top: -150px; right: -150px;
+    width: 500px; height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #00d4ff22 0%, transparent 70%);
+  }
+  .glow-bottom {
+    position: absolute;
+    bottom: -150px; left: -150px;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #7c3aed22 0%, transparent 70%);
+  }
+
+  .container {
+    text-align: center;
+    z-index: 10;
+    padding: 60px;
+  }
+
+  .badge {
+    display: inline-block;
+    background: #00d4ff18;
+    border: 2px solid #00d4ff;
+    border-radius: 30px;
+    padding: 10px 28px;
+    color: #00d4ff;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    margin-bottom: 36px;
+  }
+
+  .title {
+    font-size: 72px;
+    font-weight: 900;
+    color: #ffffff;
+    line-height: 1.1;
+    margin-bottom: 24px;
+  }
+
+  .title span {
+    color: #00d4ff;
+  }
+
+  .subtitle {
+    font-size: 28px;
+    color: #8b9ab0;
+    margin-bottom: 48px;
+    line-height: 1.5;
+  }
+
+  .tags {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    background: #ffffff10;
+    border: 1px solid #ffffff20;
+    border-radius: 20px;
+    padding: 10px 24px;
+    color: #ffffff99;
+    font-size: 18px;
+  }
+
+  .tag.highlight {
+    background: #00d4ff15;
+    border-color: #00d4ff55;
+    color: #00d4ff;
+  }
+
+  .count {
+    position: absolute;
+    top: 48px; right: 60px;
+    font-size: 20px;
+    color: #ffffff40;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <div class="glow-top"></div>
+  <div class="glow-bottom"></div>
+
+  <div class="count">20 PROMPTS INCLUDED</div>
+
+  <div class="container">
+    <div class="badge">NOVA · AI TOOLKIT</div>
+    <div class="title">AI Tool Review<br><span>Prompt Pack</span></div>
+    <div class="subtitle">Plug-and-play prompts for YouTube scripts &<br>Instagram carousels — ready in seconds</div>
+    <div class="tags">
+      <div class="tag highlight">✅ YouTube Scripts</div>
+      <div class="tag highlight">✅ Instagram Carousel</div>
+      <div class="tag">No Experience Needed</div>
+      <div class="tag">Tested on 20+ AI Tools</div>
+    </div>
+  </div>
+</body>
+</html>

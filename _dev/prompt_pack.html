@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #ffffff;
+    color: #1a1a2e;
+    padding: 60px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .cover {
+    text-align: center;
+    padding: 80px 40px;
+    background: linear-gradient(135deg, #0d1117 0%, #1a1f2e 100%);
+    border-radius: 20px;
+    margin-bottom: 60px;
+  }
+
+  .cover .badge {
+    display: inline-block;
+    background: #00d4ff18;
+    border: 2px solid #00d4ff;
+    border-radius: 30px;
+    padding: 8px 24px;
+    color: #00d4ff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+  }
+
+  .cover h1 {
+    font-size: 48px;
+    font-weight: 900;
+    color: #ffffff;
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+
+  .cover h1 span { color: #00d4ff; }
+
+  .cover p {
+    color: #8b9ab0;
+    font-size: 18px;
+    margin-bottom: 32px;
+  }
+
+  .cover .stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+  }
+
+  .stat { text-align: center; }
+  .stat .num { color: #00d4ff; font-size: 32px; font-weight: 900; }
+  .stat .label { color: #8b9ab0; font-size: 13px; margin-top: 4px; }
+
+  .section {
+    margin-bottom: 48px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #00d4ff;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #00d4ff22;
+  }
+
+  .how-to {
+    background: #f8fafc;
+    border-left: 4px solid #00d4ff;
+    border-radius: 0 12px 12px 0;
+    padding: 24px 28px;
+    margin-bottom: 32px;
+  }
+
+  .how-to h3 { font-size: 16px; color: #1a1a2e; margin-bottom: 12px; font-weight: 700; }
+  .how-to ol { padding-left: 20px; }
+  .how-to li { font-size: 15px; color: #444; line-height: 1.8; }
+  .how-to li span { color: #00d4ff; font-weight: 700; }
+
+  .prompt-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    page-break-inside: avoid;
+  }
+
+  .prompt-card .num {
+    display: inline-block;
+    background: linear-gradient(135deg, #00d4ff, #0066ff);
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+  }
+
+  .prompt-card h3 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+  }
+
+  .prompt-card .use-case {
+    font-size: 13px;
+    color: #7c3aed;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .prompt-card .prompt-text {
+    background: #1a1f2e;
+    color: #e2e8f0;
+    border-radius: 12px;
+    padding: 20px 24px;
+    font-size: 14px;
+    line-height: 1.8;
+    font-family: 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .prompt-card .prompt-text .bracket {
+    color: #00d4ff;
+    font-weight: 700;
+  }
+
+  .tip {
+    background: #fffbeb;
+    border: 1px solid #f59e0b44;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #92400e;
+  }
+
+  .tip strong { color: #b45309; }
+
+  .category-header {
+    background: linear-gradient(135deg, #0d1117, #1a1f2e);
+    color: white;
+    border-radius: 16px;
+    padding: 24px 32px;
+    margin-bottom: 28px;
+    margin-top: 40px;
+  }
+
+  .category-header h2 { font-size: 24px; font-weight: 900; margin-bottom: 6px; }
+  .category-header p { color: #8b9ab0; font-size: 14px; }
+  .category-header .icon { font-size: 32px; margin-bottom: 12px; }
+
+  .footer {
+    text-align: center;
+    padding: 40px;
+    color: #8b9ab0;
+    font-size: 13px;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 60px;
+  }
+
+  .footer strong { color: #00d4ff; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="badge">NOVA · AI TOOLKIT</div>
+  <h1>AI Tool Review<br><span>Prompt Pack</span></h1>
+  <p>20 plug-and-play prompts for YouTube scripts & Instagram carousels</p>
+  <div class="stats">
+    <div class="stat"><div class="num">20</div><div class="label">Prompts</div></div>
+    <div class="stat"><div class="num">4</div><div class="label">Platforms</div></div>
+    <div class="stat"><div class="num">20+</div><div class="label">Tools Tested</div></div>
+  </div>
+</div>
+
+<!-- HOW TO USE -->
+<div class="section">
+  <div class="section-title">How to Use</div>
+  <div class="how-to">
+    <h3>3 Simple Steps</h3>
+    <ol>
+      <li>Copy any prompt below</li>
+      <li>Replace <span>[TOOL NAME]</span>, <span>[COMPARE WITH]</span> with your target AI tool info</li>
+      <li>Paste into ChatGPT, Claude, or Groq → get publish-ready content instantly</li>
+    </ol>
+  </div>
+</div>
+
+<!-- YOUTUBE PROMPTS -->
+<div class="category-header">
+  <div class="icon">🎬</div>
+  <h2>YouTube Script Prompts</h2>
+  <p>Narration-style scripts that explain, engage, and convert</p>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 01</div>
+  <h3>Full Review Script (Hook → CTA)</h3>
+  <div class="use-case">Use case: Complete YouTube video narration script</div>
+  <div class="prompt-text">You are a Korean YouTube content creator reviewing AI tools. Write a natural, conversational narration script for a short-form video (60–90 seconds) reviewing [TOOL NAME].
+
+Structure:
+1. Hook (10s): Start with a relatable pain point or surprising fact about [TOOL NAME]
+2. Introduction (15s): What is [TOOL NAME] and what problem does it solve?
+3. Core Features (20s): Explain 3 key features with concrete use cases
+4. Pros (15s): 2 specific advantages with real examples
+5. Cons (10s): 1–2 honest limitations
+6. Who should use it (10s): Specific target audience
+7. CTA (10s): Subscribe + check bio link
+
+Tone: Friendly, informative, like talking to a friend
+Length: 350–450 Korean characters
+Do NOT use bullet points. Write in flowing, natural sentences.</div>
+  <div class="tip"><strong>💡 Tip:</strong> Replace [TOOL NAME] with the AI tool you're reviewing (e.g., Perplexity AI, Notion AI, Gamma)</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 02</div>
+  <h3>Hook-Only Script (Scroll Stopper)</h3>
+  <div class="use-case">Use case: First 5–10 seconds of your YouTube video</div>
+  <div class="prompt-text">Write 5 different opening hooks for a YouTube Short about [TOOL NAME].
+
+Each hook should:
+- Start with a surprising fact, question, or pain point
+- Be under 2 sentences
+- Make viewers want to keep watching
+- Be in Korean, conversational tone
+
+Format: Number each hook (1–5)</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 03</div>
+  <h3>Comparison Script (vs Competitor)</h3>
+  <div class="use-case">Use case: "[TOOL NAME] vs [COMPARE WITH]" style videos</div>
+  <div class="prompt-text">Write a Korean narration script comparing [TOOL NAME] vs [COMPARE WITH].
+
+Structure:
+1. Hook: Why people switch from [COMPARE WITH] to [TOOL NAME]
+2. What [COMPARE WITH] does well (be fair)
+3. Where [TOOL NAME] wins — with specific examples
+4. Who should stick with [COMPARE WITH]
+5. Who should switch to [TOOL NAME]
+6. Final verdict + CTA
+
+Tone: Objective, helpful — not a sales pitch
+Length: 400–500 Korean characters</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 04</div>
+  <h3>Beginner's Guide Script</h3>
+  <div class="use-case">Use case: "How to use [TOOL NAME] in 60 seconds" videos</div>
+  <div class="prompt-text">Write a beginner-friendly Korean narration script teaching how to start using [TOOL NAME] in under 60 seconds.
+
+Structure:
+1. Why beginners should try [TOOL NAME] (10s)
+2. Step 1: Getting started — what to click first (15s)
+3. Step 2: First thing to try (15s)
+4. Step 3: The one feature that changes everything (15s)
+5. CTA: Subscribe for more AI tool tips (5s)
+
+Use simple language. No jargon. Imagine explaining to someone who has never used AI tools before.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 05</div>
+  <h3>Problem-Solution Script</h3>
+  <div class="use-case">Use case: Pain-point-driven review videos</div>
+  <div class="prompt-text">Write a Korean YouTube script about [TOOL NAME] using the Problem-Solution format.
+
+1. Describe a specific, relatable problem your audience faces daily
+2. Show how people currently try to solve it (and why it's frustrating)
+3. Introduce [TOOL NAME] as the solution
+4. Show exactly how it solves the problem (step by step)
+5. Results: What changes after using [TOOL NAME]
+6. CTA
+
+Make it emotional and relatable. Start with "혹시 이런 경험 있으세요?" style opening.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 06</div>
+  <h3>Quick Tip Script (Under 30 seconds)</h3>
+  <div class="use-case">Use case: Ultra-short YouTube Shorts / TikTok style</div>
+  <div class="prompt-text">Write a 30-second Korean narration script sharing ONE killer tip about [TOOL NAME] that most people don't know.
+
+Format:
+- Line 1: Attention-grabbing opening (surprising fact or question)
+- Line 2–4: The tip explained simply
+- Line 5: Why this tip matters / what it changes
+- Line 6: CTA (subscribe + bio link)
+
+Keep it punchy. Every word must earn its place.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 07</div>
+  <h3>Weekly Roundup Script</h3>
+  <div class="use-case">Use case: "Top AI tools this week" compilation videos</div>
+  <div class="prompt-text">Write a Korean narration script for a weekly AI tool roundup video featuring [TOOL NAME] as one of 3 tools.
+
+For [TOOL NAME] segment (30 seconds):
+1. One-sentence introduction
+2. The single best use case
+3. One surprising fact or limitation
+4. Quick verdict: Who is it for?
+
+Tone: Fast-paced, energetic, like a news anchor
+The segment should feel complete even if watched alone.</div>
+</div>
+
+<!-- INSTAGRAM PROMPTS -->
+<div class="category-header">
+  <div class="icon">📱</div>
+  <h2>Instagram Carousel Prompts</h2>
+  <p>7-slide carousel captions that educate and drive saves</p>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 08</div>
+  <h3>Full 7-Slide Carousel Caption</h3>
+  <div class="use-case">Use case: Complete Instagram carousel post</div>
+  <div class="prompt-text">Create a 7-slide Instagram carousel caption for [TOOL NAME] in Korean.
+
+[S1] Title slide: "[TOOL NAME] — [20-char core description]"
+[S2] Pain point: Relatable frustration that [TOOL NAME] solves (40 chars)
+[S3] Core feature: The most powerful feature with a specific example (45 chars)
+[S4] Advantage: Key benefit with a real-life situation (45 chars)
+[S5] Honest limitation: One downside to be transparent (45 chars)
+[S6] Who it's for: Specific recommended and not-recommended users (40 chars)
+[S7] CTA: "지금 무료로 시작 → 링크는 바이오 참고 🔗"
+
+Rules:
+- No direct URLs in captions (Instagram policy)
+- Each slide = one focused idea
+- Conversational Korean, not formal
+- Use emojis sparingly (1–2 per slide max)</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 09</div>
+  <h3>Hook Slide Only (Slide 1)</h3>
+  <div class="use-case">Use case: Testing different hooks for your carousel</div>
+  <div class="prompt-text">Write 5 different hook captions for the first slide of an Instagram carousel about [TOOL NAME].
+
+Each hook should:
+- Be under 25 Korean characters
+- Create curiosity or FOMO
+- Make people swipe to the next slide
+
+Format: Number each (1–5)
+Best hook types: surprising stat, bold claim, question, "most people don't know"</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 10</div>
+  <h3>Comparison Carousel (5 slides)</h3>
+  <div class="use-case">Use case: "[TOOL NAME] vs [COMPARE WITH]" carousels</div>
+  <div class="prompt-text">Create a 5-slide comparison carousel caption in Korean: [TOOL NAME] vs [COMPARE WITH]
+
+[S1] "이 두 개, 뭐가 다를까?" — Set up the comparison
+[S2] What [COMPARE WITH] does better
+[S3] What [TOOL NAME] does better (with specific example)
+[S4] Side-by-side verdict table:
+  - Speed: __ vs __
+  - Price: __ vs __
+  - Best for: __ vs __
+[S5] Final recommendation + CTA (링크는 바이오 참고 🔗)
+
+Be fair to both tools. Readers trust objectivity.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 11</div>
+  <h3>Step-by-Step Tutorial Carousel</h3>
+  <div class="use-case">Use case: "How to use [TOOL NAME]" carousels</div>
+  <div class="prompt-text">Create a 6-slide Instagram carousel caption teaching how to use [TOOL NAME] step by step in Korean.
+
+[S1] Hook: "30초 만에 [TOOL NAME] 시작하는 법"
+[S2] Step 1: First action to take
+[S3] Step 2: Most important feature to try first
+[S4] Step 3: Advanced tip most beginners miss
+[S5] Result: What you can achieve after following these steps
+[S6] CTA + 링크는 바이오 참고 🔗
+
+Keep each step under 40 characters. Use numbered emojis (1️⃣ 2️⃣ 3️⃣)</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 12</div>
+  <h3>Pros & Cons Carousel</h3>
+  <div class="use-case">Use case: Honest, trust-building review carousels</div>
+  <div class="prompt-text">Create a 6-slide Instagram carousel caption with an honest pros and cons review of [TOOL NAME] in Korean.
+
+[S1] Hook: Attention-grabbing opening about [TOOL NAME]
+[S2] Pro 1: Best advantage with real example
+[S3] Pro 2: Second biggest benefit
+[S4] Con 1: Honest limitation (don't sugarcoat)
+[S5] Con 2: Second limitation + who this matters for
+[S6] Verdict: Is it worth it? For who? + 링크는 바이오 참고 🔗
+
+Tip: Being honest about cons builds MORE trust than hiding them.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 13</div>
+  <h3>"Save This" Educational Carousel</h3>
+  <div class="use-case">Use case: High-save carousels for algorithm boost</div>
+  <div class="prompt-text">Create a 7-slide "save this post" style carousel about [TOOL NAME] in Korean.
+
+Theme: "5 things I wish I knew before using [TOOL NAME]"
+
+[S1] Hook: "이거 알았으면 시간 아꼈을텐데..."
+[S2–S6] Each slide = one surprising insight or hidden feature
+[S7] Summary + "저장해두고 나중에 써먹어!" + 링크는 바이오 참고 🔗
+
+Format: Each insight = title (bold) + 2-line explanation
+Make readers feel they're getting insider knowledge.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 14</div>
+  <h3>Carousel Hashtag Pack</h3>
+  <div class="use-case">Use case: Hashtags to add to every AI tool carousel</div>
+  <div class="prompt-text">Generate the optimal hashtag set for an Instagram carousel post about [TOOL NAME] in the AI tools niche.
+
+Include:
+- 5 high-volume hashtags (1M+ posts)
+- 5 medium hashtags (100K–1M posts)
+- 5 niche hashtags (under 100K posts)
+- 3 Korean-specific hashtags
+
+Format the output as a single block ready to paste into Instagram.
+Also suggest the best caption ending sentence to encourage saves and shares.</div>
+</div>
+
+<!-- FACEBOOK PROMPTS -->
+<div class="category-header">
+  <div class="icon">📘</div>
+  <h2>Facebook Post Prompts</h2>
+  <p>Long-form posts that drive engagement and clicks</p>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 15</div>
+  <h3>Facebook Review Post</h3>
+  <div class="use-case">Use case: Standard Facebook AI tool review post</div>
+  <div class="prompt-text">Write a Facebook post in Korean reviewing [TOOL NAME].
+
+Structure:
+- Opening: Bold claim or surprising statement about [TOOL NAME]
+- Body: What it does, who it's for, 2 pros + 1 con
+- Tool URL: [TOOL URL]
+- Closing: Question to drive comments (e.g., "여러분은 어떤 AI 툴 쓰고 계세요?")
+
+Length: 150–200 Korean characters
+Tone: Friendly, informative, community-focused
+Include 2–3 relevant hashtags at the end</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 16</div>
+  <h3>Facebook Discussion Post</h3>
+  <div class="use-case">Use case: Posts designed to spark comments</div>
+  <div class="prompt-text">Write a Facebook post in Korean that starts a discussion about [TOOL NAME].
+
+Format:
+1. Controversial or surprising opinion about [TOOL NAME] (1–2 sentences)
+2. Brief explanation of your view (2–3 sentences)
+3. Tool URL: [TOOL URL]
+4. Direct question to the audience
+
+Goal: Get people to comment and share their opinions.
+Avoid: Being too promotional or salesy.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 17</div>
+  <h3>Facebook Story-Style Post</h3>
+  <div class="use-case">Use case: Personal story format for higher trust</div>
+  <div class="prompt-text">Write a Korean Facebook post in a personal story format about discovering [TOOL NAME].
+
+Structure:
+1. "오늘 [TOOL NAME] 써봤는데..." — Personal discovery story
+2. What surprised you about it
+3. One specific thing you did with it
+4. Your honest opinion after using it
+5. Tool URL: [TOOL URL]
+6. Invite others to share their experience
+
+Tone: Like a genuine personal post, not an ad.
+Length: 100–150 characters</div>
+</div>
+
+<!-- VIRAL HOOK PROMPTS -->
+<div class="category-header">
+  <div class="icon">🔥</div>
+  <h2>Viral Hook Prompts</h2>
+  <p>Opening lines that stop the scroll across all platforms</p>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 18</div>
+  <h3>Curiosity Gap Hooks</h3>
+  <div class="use-case">Use case: Universal hooks for any platform</div>
+  <div class="prompt-text">Generate 10 curiosity-gap hook sentences in Korean for content about [TOOL NAME].
+
+Hook types to include:
+- "대부분의 사람들이 모르는..." (What most people don't know)
+- "이걸 알면 돌아갈 수 없어..." (No going back after this)
+- "왜 아무도 이 AI 툴 안 쓰는 거야?" (Why isn't everyone using this?)
+- Numbers: "하루 40분을 아끼는 AI 툴"
+- Question: "AI로 이게 된다고?"
+
+Output: 10 hooks, each on a new line, no numbering needed.
+Best hooks create a gap between what they know and what they WANT to know.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 19</div>
+  <h3>Trend-Jacking Hooks</h3>
+  <div class="use-case">Use case: Tie [TOOL NAME] to current AI trends</div>
+  <div class="prompt-text">Write 5 Korean hook sentences for [TOOL NAME] that reference current AI trends or popular comparisons.
+
+Reference angles:
+- Compare to ChatGPT (everyone knows it)
+- Reference "AI 시대" (the AI era)
+- "GPT-4보다 이게 더 낫다고?" style
+- Free vs paid angle
+- Time-saving angle ("10분이면 충분")
+
+Output: 5 hooks ready to use as opening lines for YouTube, Instagram, or Facebook.</div>
+</div>
+
+<div class="prompt-card">
+  <div class="num">PROMPT 20</div>
+  <h3>Full Content Calendar Generator</h3>
+  <div class="use-case">Use case: Plan an entire week of content around [TOOL NAME]</div>
+  <div class="prompt-text">Create a 7-day Korean content calendar for [TOOL NAME] across YouTube, Instagram, and Facebook.
+
+For each day, provide:
+- Platform
+- Content type (Short, Carousel, Post)
+- Hook/title (1 line)
+- Core message (1 sentence)
+
+Day themes:
+Mon: Introduction / What is [TOOL NAME]?
+Tue: Core feature spotlight
+Wed: Comparison vs competitor
+Thu: Step-by-step tutorial
+Fri: Pros & Cons honest review
+Sat: User tip / Hidden feature
+Sun: Weekly recap + CTA
+
+Output in a clean table format.</div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <p>Thank you for purchasing <strong>AI Tool Review Prompt Pack</strong> by NOVA</p>
+  <p style="margin-top: 8px;">Questions? Feedback? Leave a review on Gumroad — it helps more than you know.</p>
+</div>
+
+</body>
+</html>

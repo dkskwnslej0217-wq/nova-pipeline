@@ -1,0 +1,9 @@
+{
+  "toolName": "Perplexity AI",
+  "toolDesc": "AI가 출처 포함해서 검색해주는 도구",
+  "bullets": ["답변마다 출처 링크 자동 첨부", "실시간 웹 검색으로 최신 정보", "PDF·논문 요약 가능"],
+  "steps": ["perplexity.ai 무료 접속", "궁금한 거 그냥 질문", "출처 클릭해서 팩트체크"],
+  "compareText": "ChatGPT",
+  "screenshotDataUrl": null,
+  "totalFrames": 900
+}
