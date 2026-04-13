@@ -18,6 +18,63 @@ const CHECKS = [
     }
   },
   {
+    name: 'Instagram 토큰',
+    test: async (env) => {
+      if (!env.IG_TOKEN) throw new Error('INSTAGRAM_ACCESS_TOKEN 환경변수 없음');
+      const res = await fetch(
+        `https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${env.IG_TOKEN}`,
+        { signal: AbortSignal.timeout(8000) }
+      );
+      const d = await res.json();
+      if (d.error) throw new Error(`${d.error.code}: ${d.error.message}`);
+      if (!d.id) throw new Error('응답에 id 없음');
+      return `@${d.username || d.id} 토큰 정상`;
+    }
+  },
+  {
+    name: 'YouTube 토큰',
+    test: async (env) => {
+      if (!env.YT_CLIENT_ID || !env.YT_CLIENT_SECRET || !env.YT_REFRESH_TOKEN)
+        throw new Error('YouTube 환경변수 누락');
+      // refresh_token으로 access_token만 발급 (업로드 없음)
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: env.YT_CLIENT_ID,
+          client_secret: env.YT_CLIENT_SECRET,
+          refresh_token: env.YT_REFRESH_TOKEN,
+          grant_type: 'refresh_token',
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenData.access_token) throw new Error(`토큰 갱신 실패: ${tokenData.error}`);
+      // 채널 정보 조회만 (업로드 없음)
+      const chRes = await fetch(
+        'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
+        { headers: { Authorization: `Bearer ${tokenData.access_token}` }, signal: AbortSignal.timeout(8000) }
+      );
+      const chData = await chRes.json();
+      const ch = chData.items?.[0]?.snippet;
+      if (!ch) throw new Error('채널 정보 없음 — refresh_token 만료 가능성');
+      return `"${ch.title}" 채널 토큰 정상`;
+    }
+  },
+  {
+    name: 'GitHub Token (영상 파이프라인)',
+    test: async (env) => {
+      if (!env.GITHUB_TOKEN) throw new Error('GITHUB_TOKEN 환경변수 없음');
+      const res = await fetch('https://api.github.com/user', {
+        headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'nova-pipeline' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`GitHub HTTP ${res.status} — 토큰 만료 또는 권한 없음`);
+      const d = await res.json();
+      return `GitHub @${d.login} 토큰 정상`;
+    }
+  },
+  {
     name: 'Groq AI 연결',
     test: async (env) => {
       const res = await fetch('https://api.groq.com/openai/v1/models', {
@@ -67,10 +124,15 @@ export default async function handler(req) {
   }
 
   const env = {
-    SUPA_URL: process.env.SUPABASE_URL,
-    SUPA_KEY: process.env.SUPABASE_SERVICE_KEY,
-    GROQ_KEY: process.env.GROQ_API_KEY,
-    APP_URL:  'https://my-project-xi-sand-93.vercel.app',
+    SUPA_URL:         process.env.SUPABASE_URL,
+    SUPA_KEY:         process.env.SUPABASE_SERVICE_KEY,
+    GROQ_KEY:         process.env.GROQ_API_KEY,
+    IG_TOKEN:         process.env.INSTAGRAM_ACCESS_TOKEN,
+    YT_CLIENT_ID:     process.env.YOUTUBE_CLIENT_ID,
+    YT_CLIENT_SECRET: process.env.YOUTUBE_CLIENT_SECRET,
+    YT_REFRESH_TOKEN: process.env.YOUTUBE_REFRESH_TOKEN,
+    GITHUB_TOKEN:     process.env.GITHUB_TOKEN,
+    APP_URL:          'https://my-project-xi-sand-93.vercel.app',
   };
 
   const TG_TOKEN = process.env.TELEGRAM_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
