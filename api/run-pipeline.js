@@ -151,6 +151,18 @@ async function saveTrends(hnTrends, ghTrends, redditTrends) {
   });
 }
 
+// ─── crawlee-agent trend_sources 읽기 ────────────────────
+async function fetchTrendSources() {
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const res = await fetch(
+    `${SUPA_URL}/rest/v1/trend_sources?date=eq.${today}&source=neq.groq_summary&select=source,title,description&order=score.desc&limit=20`,
+    { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+  );
+  if (!res.ok) return [];
+  const rows = await res.json();
+  return rows.map(r => r.title + (r.description ? `: ${r.description.slice(0, 80)}` : ''));
+}
+
 // ─── Product Hunt AI 신제품 (API 키 불필요) ───────────────
 async function fetchProductHuntAI() {
   const res = await fetch('https://www.producthunt.com/feed?category=artificial-intelligence', {
@@ -248,13 +260,14 @@ async function fetchRecentTopics() {
 }
 
 // ─── 14b: 오늘의 AI 툴 선정 (Gemini) ────────────────────
-async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = [], phTrends = [], recentTopics = [], topScored = []) {
+async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrends = [], igTop = [], googleTrends = [], phTrends = [], recentTopics = [], topScored = [], crawleeTrends = []) {
   const trim = (arr, n = 5) => arr.slice(0, n).map(s => String(s).slice(0, 80));
   const hnSection = hnTrends.length ? `[HackerNews]\n${trim(hnTrends).join('\n')}` : '';
   const phSection = phTrends.length ? `[Product Hunt AI 신제품]\n${trim(phTrends).join('\n')}` : '';
   const ghSection = ghTrends.length ? `[GitHub 트렌딩]\n${trim(ghTrends).join('\n')}` : '';
   const rdSection = redditTrends.length ? `[Reddit r/artificial]\n${trim(redditTrends).join('\n')}` : '';
-  const context = [phSection, hnSection, ghSection, rdSection].filter(Boolean).join('\n\n');
+  const crawleeSection = crawleeTrends.length ? `[crawlee-agent 수집]\n${trim(crawleeTrends, 8).join('\n')}` : '';
+  const context = [phSection, hnSection, ghSection, rdSection, crawleeSection].filter(Boolean).join('\n\n');
 
   const ctx = getContentContext();
   const memorySection = recentTopics.length
@@ -716,7 +729,7 @@ export default async function handler(req, res) {
 
   try {
     // 14a 트렌드 수집 + 메모리 조회 (병렬)
-    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory] = await Promise.all([
+    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, crawleeTrends] = await Promise.all([
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
       fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
@@ -725,6 +738,7 @@ export default async function handler(req, res) {
       fetchGoogleTrendsKR().catch(() => []),
       fetchProductHuntAI().catch(() => []),
       fetchRecentTopics().catch(() => ({ recent: [], topScored: [] })),
+      fetchTrendSources().catch(() => []),
     ]);
     const trendSummary = [
       hnTrends.length     ? `🔥 HN:\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
@@ -739,7 +753,7 @@ export default async function handler(req, res) {
     // 14b Gemini — 오늘의 AI 툴 선정
     let keywords;
     try {
-      keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored);
+      keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored, crawleeTrends);
       // 형식 검증: "툴이름|||설명|||대상|||가격" 형태인지 확인
       if (!keywords.includes('|||')) {
         // 폴백: phTrends 첫 번째 항목 사용
