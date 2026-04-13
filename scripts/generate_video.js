@@ -633,21 +633,14 @@ asyncio.run(main())
   console.log('\n☁️  Supabase 영상 업로드 중...');
   const videoUrl = await withRetry('Supabase 업로드', () => uploadToSupabase('output.mp4'));
 
-  // ── 4b. 인스타 캐러셀 이미지 생성 + 업로드 ────────────────────
-  console.log('\n🖼️  인스타 캐러셀 이미지 생성 중 (7장)...');
-  const igSlides = parseIGSlides(SCRIPT_IG_SLIDES || '', toolName);
-  const igImagePaths = await generateCarouselImages(igSlides, toolName);
-  const igImageUrls  = await uploadCarouselToSupabase(igImagePaths);
-  console.log(`✅ 캐러셀 이미지 ${igImageUrls.length}장 업로드 완료`);
-
   // ── 5. 플랫폼 발행 (순차: Instagram → YouTube) ──────────────
   // ⚠️ Facebook: 차단 해제 대기 중 — 비활성화 (재활성화 전 junho 확인 필요)
   console.log('\n📤 플랫폼 발행 중...');
   const today = kstDate();
 
-  // 인스타 캐러셀 캡션 — 링크 금지, 바이오 안내만
-  const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')}`;
-  const igCaption = `${igSlides.s1}\n\n${igSlides.s2}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
+  // 인스타 릴스 캡션
+  const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')} #Shorts`;
+  const igCaption = `${title}\n\n${scriptText.slice(0, 300)}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
 
   // 사람처럼 보이도록 발행 전 랜덤 딜레이 (30~90초)
   const humanDelay = Math.floor(Math.random() * 60000) + 30000;
@@ -668,14 +661,14 @@ asyncio.run(main())
       await tg(`⚠️ Instagram 재시도 한도 초과 (${igRetryCount}회)\n오늘은 발행 중단. 내일 자동 재시작.`);
     } else {
       try {
-        const igPostId = await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCaption), 1, 30000);
+        const igPostId = await withRetry('Instagram 릴스', () => postInstagramReel(videoUrl, igCaption), 1, 30000);
         igStatus = '✅';
         await upsertPublishLog(today, 'instagram', 'success', {
           postId: igPostId,
-          content: { imageUrls: igImageUrls, caption: igCaption },
+          content: { videoUrl, caption: igCaption },
           retryCount: igRetryCount,
         });
-        await tg(`📸 Instagram 발행 완료\n🔧 툴: ${toolName}`);
+        await tg(`🎬 Instagram 릴스 발행 완료\n🔧 툴: ${toolName}`);
       } catch (e) {
         const errMsg = e.message || '';
         // 차단/스팸 감지 에러코드 — 즉시 중단 (재시도 금지)
@@ -690,7 +683,7 @@ asyncio.run(main())
         const logStatus = isRateLimited ? 'rate_limited' : 'failed';
         await upsertPublishLog(today, 'instagram', logStatus, {
           errorMsg: errMsg.slice(0, 200),
-          content: { imageUrls: igImageUrls, caption: igCaption },
+          content: { videoUrl, caption: igCaption },
           retryCount: igRetryCount + 1,
         });
         if (isRateLimited) {
