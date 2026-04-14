@@ -783,10 +783,14 @@ export default async function handler(req, res) {
     // 14b-2 Gemini 툴 상세 분석 (슬라이드용 실제 정보 수집)
     const toolNameForAnalysis = keywords.split('|||')[0]?.trim() || 'AI 툴';
     const compareForAnalysis  = keywords.split('|||')[4]?.trim() || 'ChatGPT';
-    const toolDetails = await analyzeToolDetails(toolNameForAnalysis, compareForAnalysis);
-    // 공식 URL 추출 (Gemini가 "공식URL: https://..." 형식으로 반환)
+    let toolDetails = await analyzeToolDetails(toolNameForAnalysis, compareForAnalysis);
+    // research-agent의 reason_kr 주입 (있으면 슬라이드 콘텐츠에 활용)
+    if (researchResult?.reason_kr) {
+      toolDetails += `\n한국인에게 유용한 이유: ${researchResult.reason_kr}`;
+    }
+    // 공식 URL: research-agent 결과 우선, 없으면 Gemini 추출값 사용
     const urlMatch = toolDetails.match(/공식URL:\s*(https?:\/\/[^\s]+)/);
-    const officialUrl = urlMatch?.[1] || '';
+    const officialUrl = researchResult?.tool_url || urlMatch?.[1] || '';
 
     // 14c Groq
     const hooksRaw = await generateHooks(keywords);
