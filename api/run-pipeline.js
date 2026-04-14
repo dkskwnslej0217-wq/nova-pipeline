@@ -646,7 +646,11 @@ export default async function handler(req, res) {
   const secret = req.headers['x-pipeline-secret'];
   const isCron = req.headers['x-vercel-cron'] === '1';
   if (!isCron && secret !== PIPELINE_SECRET) {
-    await tg(`🚨 파이프라인 401 — 시크릿 불일치\nMake.com 헤더 설정 확인 필요`);
+    if (!PIPELINE_SECRET) {
+      await tg(`🚨 파이프라인 401 — PIPELINE_SECRET 환경변수 미설정\nVercel 대시보드 → Settings → Environment Variables → PIPELINE_SECRET 추가 필요`);
+    } else {
+      await tg(`🚨 파이프라인 401 — 시크릿 불일치\nMake.com의 x-pipeline-secret 헤더 값과 Vercel PIPELINE_SECRET 확인 필요`);
+    }
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
