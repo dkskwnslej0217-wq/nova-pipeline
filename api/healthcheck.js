@@ -50,13 +50,22 @@ const CHECKS = [
       });
       const tokenData = await tokenRes.json();
       if (!tokenData.access_token) throw new Error(`토큰 갱신 실패: ${tokenData.error}`);
-      // 채널 정보 조회만 (업로드 없음)
+      // 채널 정보 조회만 (업로드 없음) — mine=true 먼저, 브랜드 계정이면 managedByMe=true 폴백
+      const authHeader = { Authorization: `Bearer ${tokenData.access_token}` };
       const chRes = await fetch(
         'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-        { headers: { Authorization: `Bearer ${tokenData.access_token}` }, signal: AbortSignal.timeout(8000) }
+        { headers: authHeader, signal: AbortSignal.timeout(8000) }
       );
       const chData = await chRes.json();
-      const ch = chData.items?.[0]?.snippet;
+      let ch = chData.items?.[0]?.snippet;
+      if (!ch) {
+        const chRes2 = await fetch(
+          'https://www.googleapis.com/youtube/v3/channels?part=snippet&managedByMe=true',
+          { headers: authHeader, signal: AbortSignal.timeout(8000) }
+        );
+        const chData2 = await chRes2.json();
+        ch = chData2.items?.[0]?.snippet;
+      }
       if (!ch) throw new Error('채널 정보 없음 — refresh_token 만료 가능성');
       return `"${ch.title}" 채널 토큰 정상`;
     }
