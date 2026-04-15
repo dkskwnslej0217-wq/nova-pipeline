@@ -50,24 +50,8 @@ const CHECKS = [
       });
       const tokenData = await tokenRes.json();
       if (!tokenData.access_token) throw new Error(`토큰 갱신 실패: ${tokenData.error}`);
-      // 채널 정보 조회만 (업로드 없음) — mine=true 먼저, 브랜드 계정이면 managedByMe=true 폴백
-      const authHeader = { Authorization: `Bearer ${tokenData.access_token}` };
-      const chRes = await fetch(
-        'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-        { headers: authHeader, signal: AbortSignal.timeout(8000) }
-      );
-      const chData = await chRes.json();
-      let ch = chData.items?.[0]?.snippet;
-      if (!ch) {
-        const chRes2 = await fetch(
-          'https://www.googleapis.com/youtube/v3/channels?part=snippet&managedByMe=true',
-          { headers: authHeader, signal: AbortSignal.timeout(8000) }
-        );
-        const chData2 = await chRes2.json();
-        ch = chData2.items?.[0]?.snippet;
-      }
-      if (!ch) throw new Error(`채널 정보 없음 — API응답: ${JSON.stringify(chData).slice(0,120)}`);
-      return `"${ch.title}" 채널 토큰 정상`;
+      // youtube.upload 스코프만 있으면 채널 조회 불가 → 토큰 교환 성공만 확인
+      return `YouTube upload 토큰 정상 (scope: ${tokenData.scope || 'youtube.upload'})`;
     }
   },
   {
