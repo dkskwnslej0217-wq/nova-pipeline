@@ -1,0 +1,21 @@
+name: YouTube Token Check
+
+on:
+  schedule:
+    - cron: '0 9 */6 * *'   # 6일마다 09:00 UTC (18:00 KST)
+  workflow_dispatch:          # 수동 실행 가능
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: YouTube 토큰 상태 확인
+        run: |
+          RESULT=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://nova-pipeline-two.vercel.app/api/yt-remind?secret=${{ secrets.PIPELINE_SECRET }}")
+          echo "HTTP status: $RESULT"
+          if [ "$RESULT" != "200" ]; then
+            echo "헬스체크 엔드포인트 오류: $RESULT"
+            exit 1
+          fi
+          echo "✅ 토큰 체크 완료 (실패 시 Telegram 알림 발송됨)"
