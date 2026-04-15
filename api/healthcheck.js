@@ -66,7 +66,7 @@ const CHECKS = [
         const chData2 = await chRes2.json();
         ch = chData2.items?.[0]?.snippet;
       }
-      if (!ch) throw new Error('채널 정보 없음 — refresh_token 만료 가능성');
+      if (!ch) throw new Error(`채널 정보 없음 — API응답: ${JSON.stringify(chData).slice(0,120)}`);
       return `"${ch.title}" 채널 토큰 정상`;
     }
   },
