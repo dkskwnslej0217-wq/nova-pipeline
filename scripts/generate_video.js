@@ -241,19 +241,25 @@ function parseIGSlides(raw, toolName) {
 
 function makeSlideHTML(slideNum, total, text, toolName, type) {
   const cfg = {
-    title:   { accent: '#20B8CD', icon: '🤖', label: '오늘의 AI 툴' },
-    problem: { accent: '#f97316', icon: '💡', label: '이런 문제 있으세요?' },
-    feature: { accent: '#3b82f6', icon: '⚡', label: '핵심 기능' },
-    pros:    { accent: '#3fb950', icon: '✅', label: '장점' },
-    cons:    { accent: '#f85149', icon: '⚠️', label: '단점 (솔직하게)' },
-    target:  { accent: '#a855f7', icon: '🎯', label: '이런 분께 추천' },
-    cta:     { accent: '#20B8CD', icon: '🚀', label: '시작하기' },
+    title:   { accent: '#20B8CD', bg2: '#1a2a3a', icon: '🤖', label: '오늘의 AI 툴' },
+    problem: { accent: '#f97316', bg2: '#2a1a0d', icon: '💡', label: '이런 문제 있으세요?' },
+    feature: { accent: '#3b82f6', bg2: '#0d1a2a', icon: '⚡', label: '핵심 기능' },
+    pros:    { accent: '#3fb950', bg2: '#0d2a14', icon: '✅', label: '장점' },
+    cons:    { accent: '#f85149', bg2: '#2a0d0d', icon: '⚠️', label: '단점 (솔직하게)' },
+    target:  { accent: '#a855f7', bg2: '#1a0d2a', icon: '🎯', label: '이런 분께 추천' },
+    cta:     { accent: '#20B8CD', bg2: '#1a2a3a', icon: '🚀', label: '시작하기' },
   };
-  const { accent, icon, label } = cfg[type] || cfg.title;
+  const { accent, bg2, icon, label } = cfg[type] || cfg.title;
+
+  // 진행 바 (상단)
+  const progressPct = Math.round((slideNum / total) * 100);
+
+  // 점 페이지네이션
   const dots = Array.from({ length: total }, (_, i) =>
     `<div class="dot${i + 1 === slideNum ? ' on' : ''}"></div>`
   ).join('');
 
+  // 텍스트 포맷
   const formattedText = text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>')
@@ -263,33 +269,91 @@ function makeSlideHTML(slideNum, total, text, toolName, type) {
     .replace(/①|②|③/g, m => `<span style="color:${accent};font-weight:700">${m}</span>`)
     .replace(/•/g, `<span style="color:${accent}">•</span>`);
 
+  // CTA 슬라이드 특별 레이아웃
+  const isCTA = type === 'cta';
+  const bodyContent = isCTA
+    ? `<div class="cta-wrap">
+        <div class="cta-title">${toolName}</div>
+        <div class="cta-sub">${formattedText}</div>
+        <div class="cta-btn">지금 무료로 시작 →</div>
+      </div>`
+    : `<div class="body">${formattedText}</div>`;
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{width:1080px;height:1080px;background:#0d1117;
+body{width:1080px;height:1080px;
+  background:linear-gradient(145deg,#0d1117 0%,${bg2} 55%,#0d1117 100%);
   font-family:'Noto Sans KR','NanumGothic',sans-serif;
   display:flex;flex-direction:column;justify-content:center;
-  align-items:flex-start;padding:80px 90px;position:relative;overflow:hidden}
-.glow{position:absolute;top:-180px;right:-180px;width:540px;height:540px;
-  border-radius:50%;background:radial-gradient(circle,${accent}25 0%,transparent 70%)}
-.nova{position:absolute;top:48px;right:60px;border:2px solid ${accent};
-  border-radius:40px;padding:12px 28px;color:${accent};font-size:28px;
+  align-items:flex-start;padding:88px 96px 80px;position:relative;overflow:hidden}
+
+/* 배경 장식 */
+.glow-tl{position:absolute;top:-160px;left:-160px;width:480px;height:480px;
+  border-radius:50%;background:radial-gradient(circle,${accent}1a 0%,transparent 70%)}
+.glow-br{position:absolute;bottom:-160px;right:-160px;width:480px;height:480px;
+  border-radius:50%;background:radial-gradient(circle,${accent}12 0%,transparent 70%)}
+.grid{position:absolute;inset:0;
+  background-image:linear-gradient(${accent}08 1px,transparent 1px),
+                   linear-gradient(90deg,${accent}08 1px,transparent 1px);
+  background-size:80px 80px}
+.corner-line-h{position:absolute;top:0;left:0;width:200px;height:3px;
+  background:linear-gradient(90deg,${accent},transparent)}
+.corner-line-v{position:absolute;top:0;left:0;width:3px;height:200px;
+  background:linear-gradient(180deg,${accent},transparent)}
+
+/* 상단 진행 바 */
+.progress-track{position:absolute;top:0;left:0;right:0;height:6px;background:rgba(255,255,255,0.07)}
+.progress-fill{height:100%;width:${progressPct}%;
+  background:linear-gradient(90deg,${accent},${accent}88);
+  box-shadow:0 0 10px ${accent}66}
+
+/* NOVA 배지 */
+.nova{position:absolute;top:44px;right:60px;border:2px solid ${accent};
+  border-radius:40px;padding:10px 28px;color:${accent};font-size:26px;
   font-weight:900;background:${accent}18;letter-spacing:2px}
-.label{color:${accent};font-size:30px;font-weight:700;margin-bottom:18px;
-  display:flex;align-items:center;gap:12px}
-.bar{width:64px;height:5px;border-radius:3px;background:${accent};margin-bottom:32px}
-.title{color:#e6edf3;font-size:56px;font-weight:900;margin-bottom:20px;line-height:1.2}
-.body{color:#c9d1d9;font-size:38px;font-weight:400;line-height:1.9;word-break:keep-all;max-width:900px}
-.dots{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);
-  display:flex;gap:12px}
-.dot{width:12px;height:12px;border-radius:50%;background:#30363d}
-.dot.on{background:${accent}}
+
+/* 슬라이드 번호 */
+.slide-num{position:absolute;top:52px;left:96px;color:${accent};
+  font-size:24px;font-weight:700;opacity:0.6}
+
+/* 콘텐츠 */
+.label{color:${accent};font-size:28px;font-weight:700;margin-bottom:16px;
+  display:flex;align-items:center;gap:10px}
+.bar{width:56px;height:4px;border-radius:2px;
+  background:linear-gradient(90deg,${accent},${accent}44);margin-bottom:28px}
+.tool-name{color:#e6edf3;font-size:52px;font-weight:900;margin-bottom:16px;
+  line-height:1.15;word-break:keep-all}
+.body{color:#c9d1d9;font-size:38px;font-weight:400;line-height:1.9;
+  word-break:keep-all;max-width:900px}
+
+/* CTA 특별 */
+.cta-wrap{display:flex;flex-direction:column;align-items:center;
+  width:100%;text-align:center;gap:32px}
+.cta-title{color:${accent};font-size:64px;font-weight:900;word-break:keep-all}
+.cta-sub{color:#c9d1d9;font-size:38px;line-height:1.8;word-break:keep-all}
+.cta-btn{background:linear-gradient(135deg,${accent},${accent}88);
+  border-radius:60px;padding:28px 72px;color:#fff;font-size:42px;font-weight:900;
+  box-shadow:0 0 40px ${accent}44}
+
+/* 하단 점 */
+.dots{position:absolute;bottom:44px;left:50%;transform:translateX(-50%);
+  display:flex;gap:14px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;background:#30363d}
+.dot.on{width:28px;border-radius:6px;background:${accent};
+  box-shadow:0 0 8px ${accent}88}
 </style></head><body>
-<div class="glow"></div>
+<div class="glow-tl"></div>
+<div class="glow-br"></div>
+<div class="grid"></div>
+<div class="corner-line-h"></div>
+<div class="corner-line-v"></div>
+<div class="progress-track"><div class="progress-fill"></div></div>
 <div class="nova">NOVA</div>
+<div class="slide-num">${slideNum} / ${total}</div>
 <div class="label"><span>${icon}</span>${label}</div>
 <div class="bar"></div>
-${type === 'title' ? `<div class="title">${toolName}</div>` : ''}
-<div class="body">${formattedText}</div>
+${type === 'title' ? `<div class="tool-name">${toolName}</div>` : ''}
+${bodyContent}
 <div class="dots">${dots}</div>
 </body></html>`;
 }

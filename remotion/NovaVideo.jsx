@@ -35,6 +35,71 @@ function useScaleIn(delay = 0) {
   };
 }
 
+// ── 진행 바 ───────────────────────────────────────────────────────
+function ProgressBar({ currentSlide, totalSlides }) {
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0, right: 0,
+      height: 8, zIndex: 100,
+      background: 'rgba(255,255,255,0.08)',
+    }}>
+      <div style={{
+        height: '100%',
+        width: `${((currentSlide + 1) / totalSlides) * 100}%`,
+        background: `linear-gradient(90deg, ${C.cyan}, ${C.blue})`,
+        boxShadow: `0 0 12px ${C.cyan}88`,
+        transition: 'width 0.3s ease',
+      }} />
+      {/* 슬라이드 구분점 */}
+      {Array.from({ length: totalSlides }).map((_, i) => (
+        <div key={i} style={{
+          position: 'absolute', top: '50%', left: `${((i + 1) / totalSlides) * 100}%`,
+          transform: 'translate(-50%, -50%)',
+          width: 14, height: 14, borderRadius: '50%',
+          background: i < currentSlide + 1 ? C.cyan : 'rgba(255,255,255,0.15)',
+          boxShadow: i < currentSlide + 1 ? `0 0 8px ${C.cyan}` : 'none',
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── 플로팅 도트 (배경 파티클) ─────────────────────────────────────
+function FloatingDots({ accentColor = C.cyan }) {
+  const frame = useCurrentFrame();
+  const DOTS = [
+    { x: 0.12, y: 0.22, size: 6, speed: 0.4, phase: 0 },
+    { x: 0.88, y: 0.35, size: 4, speed: 0.6, phase: 1.2 },
+    { x: 0.25, y: 0.65, size: 8, speed: 0.3, phase: 2.5 },
+    { x: 0.75, y: 0.72, size: 5, speed: 0.5, phase: 0.8 },
+    { x: 0.55, y: 0.18, size: 4, speed: 0.7, phase: 3.1 },
+    { x: 0.08, y: 0.82, size: 6, speed: 0.35, phase: 1.8 },
+    { x: 0.92, y: 0.88, size: 5, speed: 0.55, phase: 4.0 },
+  ];
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+      {DOTS.map((d, i) => {
+        const offsetY = Math.sin((frame * d.speed * 0.04) + d.phase) * 18;
+        const opacity = interpolate(Math.sin((frame * d.speed * 0.06) + d.phase), [-1, 1], [0.15, 0.45]);
+        return (
+          <div key={i} style={{
+            position: 'absolute',
+            left: `${d.x * 100}%`,
+            top: `calc(${d.y * 100}% + ${offsetY}px)`,
+            width: d.size * 2,
+            height: d.size * 2,
+            borderRadius: '50%',
+            background: accentColor,
+            opacity,
+            boxShadow: `0 0 ${d.size * 3}px ${accentColor}66`,
+          }} />
+        );
+      })}
+    </div>
+  );
+}
+
 // ── 공통 컴포넌트 ─────────────────────────────────────────────────
 function NovaBadge() {
   const style = useScaleIn(0);
@@ -51,10 +116,11 @@ function NovaBadge() {
   );
 }
 
-function SlideWrap({ children }) {
+function SlideWrap({ children, accentColor }) {
   const opacity = useFadeIn(0, 12);
   return (
     <AbsoluteFill style={{ background: C.bg, opacity, fontFamily: FONT }}>
+      <FloatingDots accentColor={accentColor || C.cyan} />
       {children}
     </AbsoluteFill>
   );
@@ -148,7 +214,7 @@ export function Slide2({ toolName, bullets }) {
   const ACCENTS = [C.cyan, C.purple, C.green];
 
   return (
-    <SlideWrap>
+    <SlideWrap accentColor={C.cyan}>
       <NovaBadge />
       <div style={{ position: 'absolute', top: 180, left: PAD, right: PAD }}>
         <Badge label="핵심 기능" color={C.cyan} />
@@ -188,7 +254,7 @@ export function Slide3({ toolName, compareText }) {
   const bannerStyle = useSlideUp(24);
 
   return (
-    <SlideWrap>
+    <SlideWrap accentColor={C.red}>
       <NovaBadge />
       <div style={{ position: 'absolute', top: 180, left: PAD, right: PAD }}>
         <Badge label="비교 분석" color={C.red} />
@@ -254,7 +320,7 @@ export function Slide4({ toolName, steps }) {
   const COLORS = [C.cyan, C.purple, C.green];
 
   return (
-    <SlideWrap>
+    <SlideWrap accentColor={C.purple}>
       <NovaBadge />
       <div style={{ position: 'absolute', top: 180, left: PAD, right: PAD }}>
         <Badge label="시작 3단계" color={C.purple} />
@@ -303,7 +369,7 @@ export function Slide5({ toolName }) {
   const pulse = interpolate(Math.sin((frame / fps) * Math.PI * 1.5), [-1, 1], [0.97, 1.03]);
 
   return (
-    <SlideWrap>
+    <SlideWrap accentColor={C.green}>
       {/* 배경 광원 */}
       <div style={{
         position: 'absolute', top: -220, right: -220,
@@ -359,8 +425,10 @@ export function Slide5({ toolName }) {
 
 // ── 메인 컴포지션 ─────────────────────────────────────────────────
 export function NovaVideo({ toolName, toolDesc, bullets, steps, compareText, screenshotDataUrl }) {
+  const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const seg = Math.floor(durationInFrames / 5);
+  const currentSlide = Math.min(Math.floor(frame / seg), 4);
 
   return (
     <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
@@ -379,6 +447,8 @@ export function NovaVideo({ toolName, toolDesc, bullets, steps, compareText, scr
       <Sequence from={seg * 4}     durationInFrames={durationInFrames - seg * 4}>
         <Slide5 toolName={toolName} />
       </Sequence>
+      {/* 항상 최상위에 진행 바 표시 */}
+      <ProgressBar currentSlide={currentSlide} totalSlides={5} />
     </AbsoluteFill>
   );
 }
