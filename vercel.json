@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/google789c88f7a2dd4250.html", "destination": "/api/google789c88f7a2dd4250" }
+  ],
   "crons": [
     { "path": "/api/run-pipeline", "schedule": "0 23 * * *" },
     { "path": "/api/run-pipeline", "schedule": "0 3 * * *" }
