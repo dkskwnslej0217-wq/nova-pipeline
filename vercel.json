@@ -2,6 +2,10 @@
   "rewrites": [
     { "source": "/google789c88f7a2dd4250.html", "destination": "/api/google789c88f7a2dd4250" }
   ],
+  "functions": {
+    "api/run-pipeline.js": { "maxDuration": 300 },
+    "api/run-client.js":   { "maxDuration": 300 }
+  },
   "crons": [
     { "path": "/api/run-pipeline", "schedule": "0 23 * * *" },
     { "path": "/api/run-pipeline", "schedule": "0 3 * * *" }
