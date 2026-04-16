@@ -155,56 +155,54 @@ async function renderWithRemotion(props, outputPath) {
 
 // ── 슬라이드 영상 생성 (Remotion) ────────────────────────────────
 async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl) {
-  const { toolDesc, bullets, steps, compareText } = parseContent(scriptText, toolName, compareWith, combo);
+  const { hookText, bullets } = parseContent(scriptText, toolName, compareWith);
 
-  // 스크린샷 → base64 data URL
-  console.log('\n📸 툴 스크린샷 캡처 중...');
-  const screenshotBuf     = await captureToolScreenshot(toolUrl);
-  const screenshotDataUrl = screenshotBuf
-    ? `data:image/png;base64,${screenshotBuf.toString('base64')}`
-    : null;
+  // Remotion 렌더 (고정 420프레임 = 14초)
+  await renderWithRemotion({ toolName, hookText, bullets }, 'output_silent.mp4');
 
-  // Remotion 영상 렌더 (오디오 없음)
-  const totalFrames = Math.round(Math.min(audioDuration, 60) * 30);
-  await renderWithRemotion(
-    { toolName, toolDesc, bullets, steps, compareText, screenshotDataUrl, totalFrames },
-    'output_silent.mp4'
-  );
-
-  // ffmpeg — 오디오 합성
-  console.log('\n🔊 오디오 합성 중...');
-  execSync(
-    `ffmpeg -y -i output_silent.mp4 -i audio.mp3 ` +
-    `-c:v copy -c:a aac -b:a 192k -shortest output.mp4`,
-    { stdio: 'inherit' }
-  );
-  console.log('✅ output.mp4 생성 완료 (Remotion 애니메이션)');
-
-  try { fs.unlinkSync('output_silent.mp4'); } catch {}
+  // 오디오가 있으면 합성, 없으면 그대로 사용
+  if (fs.existsSync('audio.mp3')) {
+    console.log('\n🔊 오디오 합성 중...');
+    execSync(
+      `ffmpeg -y -i output_silent.mp4 -i audio.mp3 ` +
+      `-c:v copy -c:a aac -b:a 192k -shortest output.mp4`,
+      { stdio: 'inherit' }
+    );
+    try { fs.unlinkSync('output_silent.mp4'); } catch {}
+  } else {
+    fs.renameSync('output_silent.mp4', 'output.mp4');
+  }
+  console.log('✅ output.mp4 생성 완료 (14초 빠른 컷)');
 }
 
-function parseContent(scriptText, toolName, compareWith, combo) {
+function parseContent(scriptText, toolName, compareWith) {
   const sentences = (scriptText.match(/[^.!?。\n]+[.!?。]*/g) || [scriptText])
     .map(s => s.trim()).filter(s => s.length > 5);
 
   const n = sentences.length;
-  const toolDesc = sentences[0] || `${toolName}을 소개합니다`;
 
-  const bullets = n >= 4
-    ? sentences.slice(1, 4)
-    : ['핵심 작업에 특화된 AI 엔진', '무료로 바로 시작 가능', '결과물을 바로 복사·활용'];
+  // 후킹 문구: 첫 문장을 질문형으로
+  const firstSentence = sentences[0] || `${toolName}을 소개합니다`;
+  const hookText = firstSentence.endsWith('?') || firstSentence.endsWith('요?')
+    ? firstSentence
+    : `${toolName} 이거 알아요?`;
 
-  const steps = n >= 7
-    ? sentences.slice(Math.floor(n * 0.55), Math.floor(n * 0.55) + 3)
-    : [`${toolName} 사이트에서 무료 가입`, '원하는 내용을 입력하거나 업로드', '결과를 확인하고 바로 활용'];
+  // 퀵카드 4장 (핵심기능 / 이런분께 / 장점 / 시작방법)
+  const bullets = n >= 5
+    ? [
+        sentences[1] || `${toolName}의 핵심 기능`,
+        sentences[Math.floor(n * 0.4)] || '이런 분께 추천합니다',
+        sentences[Math.floor(n * 0.6)] || '무료로 바로 시작 가능',
+        sentences[Math.floor(n * 0.8)] || '링크는 바이오 참고',
+      ]
+    : [
+        `${toolName}의 핵심 기능에 특화된 AI`,
+        '시간 아끼고 싶은 분께 강추',
+        '무료 플랜으로 바로 시작 가능',
+        `링크는 바이오에서 확인하세요 🔗`,
+      ];
 
-  return {
-    toolDesc,
-    bullets,
-    steps,
-    compareText: compareWith || 'ChatGPT',
-    comboText: combo || `${toolName}로 반복 작업 자동화`,
-  };
+  return { hookText, bullets };
 }
 
 // ── Supabase Storage 업로드 ────────────────────────────────────────

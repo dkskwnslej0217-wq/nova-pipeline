@@ -9,20 +9,14 @@ export function RemotionRoot() {
     <Composition
       id="NovaVideo"
       component={NovaVideo}
-      calculateMetadata={({ props }) => ({
-        durationInFrames: props.totalFrames || 900,
-        fps: FPS,
-        width: W,
-        height: H,
-      })}
+      durationInFrames={420}
+      fps={FPS}
+      width={W}
+      height={H}
       defaultProps={{
-        totalFrames:       900,
-        toolName:          'AI Tool',
-        toolDesc:          'AI 툴을 소개합니다',
-        bullets:           ['기능 1', '기능 2', '기능 3'],
-        steps:             ['단계 1', '단계 2', '단계 3'],
-        compareText:       'ChatGPT',
-        screenshotDataUrl: null,
+        toolName:  'AI Tool',
+        hookText:  'AI Tool 이거 알아요?',
+        bullets:   ['핵심 기능 1', '이런 분께 추천', '무료로 시작 가능', '링크는 바이오 참고'],
       }}
     />
   );

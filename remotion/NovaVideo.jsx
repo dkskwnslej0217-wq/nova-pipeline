@@ -1,18 +1,45 @@
-// remotion/NovaVideo.jsx — NOVA 영상 컴포지션 (5슬라이드 애니메이션)
+// remotion/NovaVideo.jsx — NOVA Shorts v2 (빠른 컷 구조)
+// Hook(3s) → QuickCard x4(각 2s) → CTA(3s) = 총 14초
 import React from 'react';
 import {
-  AbsoluteFill, Sequence, Img,
+  AbsoluteFill, Sequence,
   useCurrentFrame, useVideoConfig,
   interpolate, spring,
 } from 'remotion';
-import { C, FONT, PAD } from './theme.js';
+import { C, FONT, W, H, PAD, FPS } from './theme.js';
 
-// ── 애니메이션 헬퍼 ───────────────────────────────────────────────
-function useFadeIn(delay = 0, dur = 15) {
+// ── 타이밍 상수 ───────────────────────────────────────────────────
+const HOOK_DUR  = 90;   // 3s
+const CARD_DUR  = 60;   // 2s × 4장
+const CTA_DUR   = 90;   // 3s
+const TOTAL     = HOOK_DUR + CARD_DUR * 4 + CTA_DUR; // 420프레임 = 14s
+
+// ── 애니메이션 헬퍼 ──────────────────────────────────────────────
+function useFade(delay = 0, dur = 10) {
   const frame = useCurrentFrame();
   return interpolate(frame, [delay, delay + dur], [0, 1], {
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
+}
+
+function useSlideRight(delay = 0) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const p = spring({ frame: frame - delay, fps, config: { damping: 70, stiffness: 280 } });
+  return {
+    opacity: interpolate(p, [0, 1], [0, 1]),
+    transform: `translateX(${interpolate(p, [0, 1], [120, 0])}px)`,
+  };
+}
+
+function useZoomIn(delay = 0) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const p = spring({ frame: frame - delay, fps, config: { damping: 60, stiffness: 300 } });
+  return {
+    opacity: interpolate(p, [0, 1], [0, 1]),
+    transform: `scale(${interpolate(p, [0, 1], [0.6, 1])})`,
+  };
 }
 
 function useSlideUp(delay = 0) {
@@ -21,78 +48,54 @@ function useSlideUp(delay = 0) {
   const p = spring({ frame: frame - delay, fps, config: { damping: 80, stiffness: 220 } });
   return {
     opacity: interpolate(p, [0, 1], [0, 1]),
-    transform: `translateY(${interpolate(p, [0, 1], [40, 0])}px)`,
+    transform: `translateY(${interpolate(p, [0, 1], [50, 0])}px)`,
   };
 }
 
-function useScaleIn(delay = 0) {
+// ── 진행 바 ──────────────────────────────────────────────────────
+function ProgressBar() {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const p = spring({ frame: frame - delay, fps, config: { damping: 100, stiffness: 260 } });
-  return {
-    opacity: interpolate(p, [0, 1], [0, 1]),
-    transform: `scale(${interpolate(p, [0, 1], [0.88, 1])})`,
-  };
-}
-
-// ── 진행 바 ───────────────────────────────────────────────────────
-function ProgressBar({ currentSlide, totalSlides }) {
+  const pct = Math.min((frame / (TOTAL - 1)) * 100, 100);
   return (
     <div style={{
-      position: 'absolute', top: 0, left: 0, right: 0,
-      height: 8, zIndex: 100,
+      position: 'absolute', top: 0, left: 0, right: 0, height: 8, zIndex: 100,
       background: 'rgba(255,255,255,0.08)',
     }}>
       <div style={{
-        height: '100%',
-        width: `${((currentSlide + 1) / totalSlides) * 100}%`,
+        height: '100%', width: `${pct}%`,
         background: `linear-gradient(90deg, ${C.cyan}, ${C.blue})`,
-        boxShadow: `0 0 12px ${C.cyan}88`,
-        transition: 'width 0.3s ease',
+        boxShadow: `0 0 14px ${C.cyan}88`,
       }} />
-      {/* 슬라이드 구분점 */}
-      {Array.from({ length: totalSlides }).map((_, i) => (
-        <div key={i} style={{
-          position: 'absolute', top: '50%', left: `${((i + 1) / totalSlides) * 100}%`,
-          transform: 'translate(-50%, -50%)',
-          width: 14, height: 14, borderRadius: '50%',
-          background: i < currentSlide + 1 ? C.cyan : 'rgba(255,255,255,0.15)',
-          boxShadow: i < currentSlide + 1 ? `0 0 8px ${C.cyan}` : 'none',
-        }} />
-      ))}
     </div>
   );
 }
 
-// ── 플로팅 도트 (배경 파티클) ─────────────────────────────────────
-function FloatingDots({ accentColor = C.cyan }) {
+// ── 플로팅 도트 ──────────────────────────────────────────────────
+function FloatingDots({ color = C.cyan }) {
   const frame = useCurrentFrame();
   const DOTS = [
-    { x: 0.12, y: 0.22, size: 6, speed: 0.4, phase: 0 },
-    { x: 0.88, y: 0.35, size: 4, speed: 0.6, phase: 1.2 },
-    { x: 0.25, y: 0.65, size: 8, speed: 0.3, phase: 2.5 },
-    { x: 0.75, y: 0.72, size: 5, speed: 0.5, phase: 0.8 },
-    { x: 0.55, y: 0.18, size: 4, speed: 0.7, phase: 3.1 },
-    { x: 0.08, y: 0.82, size: 6, speed: 0.35, phase: 1.8 },
-    { x: 0.92, y: 0.88, size: 5, speed: 0.55, phase: 4.0 },
+    { x: 0.10, y: 0.18, r: 9,  sp: 0.40, ph: 0.0 },
+    { x: 0.90, y: 0.28, r: 6,  sp: 0.55, ph: 1.3 },
+    { x: 0.22, y: 0.60, r: 11, sp: 0.30, ph: 2.6 },
+    { x: 0.80, y: 0.68, r: 7,  sp: 0.50, ph: 0.9 },
+    { x: 0.60, y: 0.14, r: 6,  sp: 0.65, ph: 3.2 },
+    { x: 0.06, y: 0.80, r: 8,  sp: 0.35, ph: 1.9 },
+    { x: 0.94, y: 0.86, r: 7,  sp: 0.48, ph: 4.1 },
+    { x: 0.45, y: 0.92, r: 5,  sp: 0.60, ph: 0.5 },
   ];
-
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
       {DOTS.map((d, i) => {
-        const offsetY = Math.sin((frame * d.speed * 0.04) + d.phase) * 18;
-        const opacity = interpolate(Math.sin((frame * d.speed * 0.06) + d.phase), [-1, 1], [0.15, 0.45]);
+        const oy = Math.sin(frame * d.sp * 0.04 + d.ph) * 22;
+        const op = interpolate(Math.sin(frame * d.sp * 0.06 + d.ph), [-1, 1], [0.30, 0.65]);
         return (
           <div key={i} style={{
             position: 'absolute',
             left: `${d.x * 100}%`,
-            top: `calc(${d.y * 100}% + ${offsetY}px)`,
-            width: d.size * 2,
-            height: d.size * 2,
-            borderRadius: '50%',
-            background: accentColor,
-            opacity,
-            boxShadow: `0 0 ${d.size * 3}px ${accentColor}66`,
+            top: `calc(${d.y * 100}% + ${oy}px)`,
+            width: d.r * 2, height: d.r * 2, borderRadius: '50%',
+            background: color, opacity: op,
+            boxShadow: `0 0 ${d.r * 4}px ${color}88`,
           }} />
         );
       })}
@@ -100,355 +103,266 @@ function FloatingDots({ accentColor = C.cyan }) {
   );
 }
 
-// ── 공통 컴포넌트 ─────────────────────────────────────────────────
-function NovaBadge() {
-  const style = useScaleIn(0);
+// ── NOVA 배지 ────────────────────────────────────────────────────
+function NovaBadge({ color = C.cyan }) {
+  const s = useZoomIn(0);
   return (
     <div style={{
-      position: 'absolute', top: 60, right: 60,
-      background: `${C.cyan}22`,
-      border: `2px solid ${C.cyan}`,
-      borderRadius: 40, padding: '16px 36px',
-      ...style,
+      position: 'absolute', top: 56, right: 56, zIndex: 10,
+      background: `${color}22`, border: `2px solid ${color}`,
+      borderRadius: 40, padding: '14px 34px', ...s,
     }}>
-      <span style={{ color: C.cyan, fontSize: 38, fontWeight: 900, fontFamily: FONT }}>NOVA</span>
+      <span style={{ color, fontSize: 36, fontWeight: 900, fontFamily: FONT }}>NOVA</span>
     </div>
   );
 }
 
-function SlideWrap({ children, accentColor }) {
-  const opacity = useFadeIn(0, 12);
-  return (
-    <AbsoluteFill style={{ background: C.bg, opacity, fontFamily: FONT }}>
-      <FloatingDots accentColor={accentColor || C.cyan} />
-      {children}
-    </AbsoluteFill>
-  );
-}
-
-function Badge({ label, color }) {
-  const style = useScaleIn(5);
-  return (
-    <div style={{
-      display: 'inline-block',
-      background: `${color}22`,
-      border: `2px solid ${color}`,
-      borderRadius: 20, padding: '12px 32px',
-      marginBottom: 48, ...style,
-    }}>
-      <span style={{ color, fontSize: 36, fontWeight: 700 }}>{label}</span>
-    </div>
-  );
-}
-
-// ── 슬라이드 1: 후킹 — 툴 스크린샷 배경 ──────────────────────────
-export function Slide1({ toolName, toolDesc, screenshotDataUrl }) {
-  const bgOpacity  = useFadeIn(0, 20);
-  const textStyle  = useSlideUp(12);
-  const ctaStyle   = useSlideUp(28);
+// ── 슬라이드 1: 후킹 ─────────────────────────────────────────────
+function HookSlide({ toolName, hookText }) {
+  const frame  = useCurrentFrame();
+  const bgOp   = useFade(0, 15);
+  const q      = useZoomIn(5);
+  const name   = useSlideUp(18);
+  const sub    = useFade(28, 12);
+  const pulse  = 1 + Math.sin(frame * 0.12) * 0.012;
 
   return (
-    <AbsoluteFill>
-      {screenshotDataUrl ? (
-        <Img
-          src={screenshotDataUrl}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: bgOpacity }}
-        />
-      ) : (
-        <AbsoluteFill style={{
-          background: `linear-gradient(160deg, #0d1117 0%, #1a1f2e 50%, #0d1117 100%)`,
-          opacity: bgOpacity,
-        }} />
-      )}
-
-      {/* 다크 그라데이션 오버레이 */}
-      <AbsoluteFill style={{
-        background: `linear-gradient(180deg,
-          rgba(13,17,23,0.15) 0%,
-          rgba(13,17,23,0.35) 35%,
-          rgba(13,17,23,0.80) 60%,
-          rgba(13,17,23,0.97) 85%,
-          rgba(13,17,23,1.00) 100%)`,
-      }} />
-
-      <NovaBadge />
-
-      {/* 하단 콘텐츠 */}
-      <div style={{
-        position: 'absolute', bottom: 180, left: PAD, right: PAD,
-        ...textStyle,
-      }}>
-        <div style={{ color: C.cyan, fontSize: 40, fontWeight: 700, marginBottom: 24 }}>
-          오늘의 AI 툴
-        </div>
-        <div style={{
-          color: C.textPri, fontSize: 92, fontWeight: 900, lineHeight: 1.1,
-          marginBottom: 28, wordBreak: 'keep-all',
-        }}>
-          {toolName}
-        </div>
-        <div style={{
-          color: C.textSec, fontSize: 44, lineHeight: 1.55,
-          marginBottom: 64, wordBreak: 'keep-all',
-        }}>
-          {toolDesc}
-        </div>
-
-        <div style={{ ...ctaStyle, display: 'inline-block' }}>
-          <div style={{
-            background: `linear-gradient(135deg, ${C.cyan}, ${C.blue})`,
-            borderRadius: 60, padding: '30px 72px',
-            color: '#fff', fontSize: 44, fontWeight: 900,
-          }}>
-            지금 바로 확인 →
-          </div>
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
-}
-
-// ── 슬라이드 2: 핵심 기능 3가지 ──────────────────────────────────
-export function Slide2({ toolName, bullets }) {
-  const ICONS   = ['⚡', '🎯', '🚀'];
-  const ACCENTS = [C.cyan, C.purple, C.green];
-
-  return (
-    <SlideWrap accentColor={C.cyan}>
-      <NovaBadge />
-      <div style={{ position: 'absolute', top: 180, left: PAD, right: PAD }}>
-        <Badge label="핵심 기능" color={C.cyan} />
-
-        <div style={{ ...useSlideUp(10), color: C.cyan, fontSize: 72, fontWeight: 900, marginBottom: 52, wordBreak: 'keep-all' }}>
-          {toolName}
-        </div>
-
-        {bullets.slice(0, 3).map((b, i) => (
-          <FeatureCard key={i} text={b} icon={ICONS[i]} accent={ACCENTS[i]} delay={10 + i * 8} />
-        ))}
-      </div>
-    </SlideWrap>
-  );
-}
-
-function FeatureCard({ text, icon, accent, delay }) {
-  const style = useSlideUp(delay);
-  return (
-    <div style={{
-      ...style,
-      background: C.card,
-      border: `1px solid ${C.border}`,
-      borderLeft: `6px solid ${accent}`,
-      borderRadius: 24, padding: '38px 44px',
-      marginBottom: 32, display: 'flex', alignItems: 'center', gap: 32,
-    }}>
-      <span style={{ fontSize: 54, flexShrink: 0 }}>{icon}</span>
-      <span style={{ color: C.textPri, fontSize: 46, lineHeight: 1.5, wordBreak: 'keep-all' }}>{text}</span>
-    </div>
-  );
-}
-
-// ── 슬라이드 3: vs 비교 ───────────────────────────────────────────
-export function Slide3({ toolName, compareText }) {
-  const vsStyle     = useSlideUp(10);
-  const bannerStyle = useSlideUp(24);
-
-  return (
-    <SlideWrap accentColor={C.red}>
-      <NovaBadge />
-      <div style={{ position: 'absolute', top: 180, left: PAD, right: PAD }}>
-        <Badge label="비교 분석" color={C.red} />
-
-        {/* VS 카드 */}
-        <div style={{ ...vsStyle, display: 'flex', alignItems: 'stretch', gap: 28, marginBottom: 48 }}>
-          {/* 기존 툴 */}
-          <div style={{
-            flex: 1, background: C.card, border: `2px solid ${C.border}`,
-            borderRadius: 28, padding: '44px 32px', textAlign: 'center',
-          }}>
-            <div style={{ color: C.textMute, fontSize: 32, marginBottom: 16 }}>기존</div>
-            <div style={{ color: C.textSec, fontSize: 56, fontWeight: 700, wordBreak: 'keep-all', lineHeight: 1.2 }}>
-              {compareText}
-            </div>
-            <div style={{ marginTop: 36, color: C.textMute, fontSize: 38, lineHeight: 2 }}>
-              ✗ 범용 도구<br />✗ 학습 필요<br />✗ 비용 발생
-            </div>
-          </div>
-
-          {/* VS 배지 */}
-          <div style={{
-            display: 'flex', alignItems: 'center', flexShrink: 0,
-            color: C.red, fontSize: 52, fontWeight: 900,
-          }}>VS</div>
-
-          {/* 신규 툴 */}
-          <div style={{
-            flex: 1, background: C.card, border: `2px solid ${C.cyan}`,
-            borderRadius: 28, padding: '44px 32px', textAlign: 'center',
-          }}>
-            <div style={{ color: C.cyan, fontSize: 32, marginBottom: 16 }}>추천</div>
-            <div style={{ color: C.cyan, fontSize: 56, fontWeight: 900, wordBreak: 'keep-all', lineHeight: 1.2 }}>
-              {toolName}
-            </div>
-            <div style={{ marginTop: 36, color: C.green, fontSize: 38, lineHeight: 2 }}>
-              ✓ 전문 특화<br />✓ 즉시 시작<br />✓ 무료 플랜
-            </div>
-          </div>
-        </div>
-
-        {/* 결론 배너 */}
-        <div style={{
-          ...bannerStyle,
-          background: `${C.green}18`,
-          border: `2px solid ${C.green}`,
-          borderRadius: 24, padding: '40px 44px', textAlign: 'center',
-        }}>
-          <div style={{ color: C.green, fontSize: 46, fontWeight: 800, marginBottom: 16 }}>
-            🏆 목적에 맞는 AI 툴이 2~5배 효율적
-          </div>
-          <div style={{ color: C.textSec, fontSize: 40, wordBreak: 'keep-all' }}>
-            이 작업엔 {toolName}가 압도적입니다
-          </div>
-        </div>
-      </div>
-    </SlideWrap>
-  );
-}
-
-// ── 슬라이드 4: 시작 3단계 ───────────────────────────────────────
-export function Slide4({ toolName, steps }) {
-  const COLORS = [C.cyan, C.purple, C.green];
-
-  return (
-    <SlideWrap accentColor={C.purple}>
-      <NovaBadge />
-      <div style={{ position: 'absolute', top: 180, left: PAD, right: PAD }}>
-        <Badge label="시작 3단계" color={C.purple} />
-
-        <div style={{ ...useSlideUp(10), color: C.purple, fontSize: 72, fontWeight: 900, marginBottom: 52, wordBreak: 'keep-all' }}>
-          {toolName}
-        </div>
-
-        {steps.slice(0, 3).map((step, i) => (
-          <StepCard key={i} num={i + 1} text={step} color={COLORS[i]} delay={10 + i * 8} />
-        ))}
-      </div>
-    </SlideWrap>
-  );
-}
-
-function StepCard({ num, text, color, delay }) {
-  const style = useSlideUp(delay);
-  return (
-    <div style={{ ...style, display: 'flex', alignItems: 'flex-start', gap: 28, marginBottom: 36 }}>
-      <div style={{
-        width: 76, height: 76, borderRadius: '50%', flexShrink: 0,
-        background: `linear-gradient(135deg, ${color}, ${C.blue})`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', fontSize: 40, fontWeight: 900,
-      }}>{num}</div>
-      <div style={{
-        flex: 1, background: C.card, border: `1px solid ${C.border}`,
-        borderRadius: 20, padding: '28px 36px',
-        color: C.textPri, fontSize: 44, lineHeight: 1.55, wordBreak: 'keep-all',
-      }}>{text}</div>
-    </div>
-  );
-}
-
-// ── 슬라이드 5: CTA ───────────────────────────────────────────────
-export function Slide5({ toolName }) {
-  const frame   = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const titleStyle = useSlideUp(5);
-  const subStyle   = useSlideUp(18);
-  const btnStyle   = useSlideUp(30);
-
-  // 버튼 펄스 효과
-  const pulse = interpolate(Math.sin((frame / fps) * Math.PI * 1.5), [-1, 1], [0.97, 1.03]);
-
-  return (
-    <SlideWrap accentColor={C.green}>
+    <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
       {/* 배경 광원 */}
       <div style={{
-        position: 'absolute', top: -220, right: -220,
-        width: 660, height: 660, borderRadius: '50%',
-        background: `radial-gradient(circle, ${C.cyan}28 0%, transparent 70%)`,
+        position: 'absolute', top: -200, left: '50%', transform: 'translateX(-50%)',
+        width: 900, height: 900, borderRadius: '50%',
+        background: `radial-gradient(circle, ${C.cyan}20 0%, transparent 65%)`,
+        opacity: bgOp,
       }} />
       <div style={{
-        position: 'absolute', bottom: -220, left: -220,
-        width: 560, height: 560, borderRadius: '50%',
-        background: `radial-gradient(circle, ${C.purple}28 0%, transparent 70%)`,
+        position: 'absolute', bottom: -200, right: -200,
+        width: 600, height: 600, borderRadius: '50%',
+        background: `radial-gradient(circle, ${C.purple}18 0%, transparent 65%)`,
       }} />
 
+      <FloatingDots color={C.cyan} />
+      <ProgressBar />
+      <NovaBadge />
+
+      {/* 콘텐츠 */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 5,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: `0 ${PAD}px`,
+      }}>
+        {/* 후킹 질문 */}
+        <div style={{
+          ...q,
+          color: C.textSec, fontSize: 52, fontWeight: 700,
+          textAlign: 'center', marginBottom: 40,
+          wordBreak: 'keep-all', lineHeight: 1.5,
+        }}>
+          {hookText}
+        </div>
+
+        {/* 툴 이름 — 임팩트 */}
+        <div style={{
+          ...name,
+          transform: `${name.transform} scale(${pulse})`,
+          textAlign: 'center', marginBottom: 48,
+        }}>
+          <div style={{
+            fontSize: 110, fontWeight: 900, lineHeight: 1.1,
+            background: `linear-gradient(135deg, ${C.cyan} 0%, ${C.blue} 50%, ${C.purple} 100%)`,
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            wordBreak: 'keep-all',
+          }}>
+            {toolName}
+          </div>
+        </div>
+
+        {/* 서브 문구 */}
+        <div style={{
+          opacity: sub,
+          color: C.textMute, fontSize: 42, textAlign: 'center',
+          wordBreak: 'keep-all',
+        }}>
+          지금 바로 확인하세요 👇
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+// ── 퀵카드 ───────────────────────────────────────────────────────
+const CARD_COLORS  = [C.cyan, C.purple, C.green, C.blue];
+const CARD_ICONS   = ['⚡', '🎯', '✅', '🚀'];
+const CARD_LABELS  = ['핵심 기능', '이런 분께', '장점', '시작 방법'];
+
+function QuickCardSlide({ text, idx }) {
+  const color  = CARD_COLORS[idx % 4];
+  const icon   = CARD_ICONS[idx % 4];
+  const label  = CARD_LABELS[idx % 4];
+  const bgOp   = useFade(0, 8);
+  const card   = useSlideRight(5);
+  const num    = useZoomIn(0);
+
+  return (
+    <AbsoluteFill style={{ background: C.bg, opacity: bgOp, fontFamily: FONT }}>
+      {/* 배경 */}
+      <div style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 800, height: 800, borderRadius: '50%',
+        background: `radial-gradient(circle, ${color}12 0%, transparent 60%)`,
+      }} />
+
+      <FloatingDots color={color} />
+      <ProgressBar />
+      <NovaBadge color={color} />
+
+      {/* 번호 */}
+      <div style={{
+        position: 'absolute', top: 160, left: PAD, zIndex: 10, ...num,
+        color: color, fontSize: 32, fontWeight: 700, opacity: 0.6,
+      }}>
+        {idx + 1} / 4
+      </div>
+
+      {/* 카드 */}
+      <div style={{
+        position: 'absolute', zIndex: 10,
+        top: '50%', left: PAD, right: PAD,
+        transform: `translateY(-50%) ${card.transform}`,
+        opacity: card.opacity,
+      }}>
+        {/* 레이블 */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 12,
+          background: `${color}22`, border: `2px solid ${color}`,
+          borderRadius: 30, padding: '12px 28px', marginBottom: 36,
+        }}>
+          <span style={{ fontSize: 36 }}>{icon}</span>
+          <span style={{ color, fontSize: 32, fontWeight: 700 }}>{label}</span>
+        </div>
+
+        {/* 메인 텍스트 */}
+        <div style={{
+          background: 'rgba(22,27,34,0.92)',
+          border: `1px solid ${color}44`,
+          borderLeft: `8px solid ${color}`,
+          borderRadius: 28, padding: '52px 56px',
+          boxShadow: `0 0 60px ${color}18`,
+        }}>
+          <div style={{
+            color: C.textPri, fontSize: 54, fontWeight: 800,
+            lineHeight: 1.55, wordBreak: 'keep-all',
+          }}>
+            {text}
+          </div>
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+// ── CTA 슬라이드 ─────────────────────────────────────────────────
+function CTASlide({ toolName }) {
+  const frame  = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const bgOp   = useFade(0, 12);
+  const title  = useSlideUp(5);
+  const btn    = useSlideUp(20);
+  const hash   = useFade(32, 10);
+  const pulse  = 1 + Math.sin(frame * 0.14) * 0.025;
+
+  return (
+    <AbsoluteFill style={{ background: C.bg, opacity: bgOp, fontFamily: FONT }}>
+      <div style={{
+        position: 'absolute', top: -180, right: -180,
+        width: 660, height: 660, borderRadius: '50%',
+        background: `radial-gradient(circle, ${C.cyan}22 0%, transparent 65%)`,
+      }} />
+      <div style={{
+        position: 'absolute', bottom: -180, left: -180,
+        width: 560, height: 560, borderRadius: '50%',
+        background: `radial-gradient(circle, ${C.purple}18 0%, transparent 65%)`,
+      }} />
+
+      <FloatingDots color={C.green} />
+      <ProgressBar />
       <NovaBadge />
 
       <div style={{
-        position: 'absolute', inset: 0,
+        position: 'absolute', inset: 0, zIndex: 5,
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', padding: PAD,
+        alignItems: 'center', justifyContent: 'center',
+        padding: `0 ${PAD}px`,
       }}>
-        <div style={{ ...titleStyle, textAlign: 'center', marginBottom: 44 }}>
-          <div style={{ fontSize: 88, marginBottom: 24 }}>🚀</div>
-          <div style={{ color: C.textPri, fontSize: 76, fontWeight: 900, lineHeight: 1.2, wordBreak: 'keep-all' }}>
+        {/* 타이틀 */}
+        <div style={{ ...title, textAlign: 'center', marginBottom: 56 }}>
+          <div style={{ fontSize: 90, marginBottom: 20 }}>🚀</div>
+          <div style={{
+            color: C.textPri, fontSize: 72, fontWeight: 900,
+            lineHeight: 1.2, wordBreak: 'keep-all',
+          }}>
             {toolName}<br />
             <span style={{ color: C.cyan }}>지금 무료로 시작</span>
           </div>
         </div>
 
+        {/* 구독 버튼 */}
         <div style={{
-          ...subStyle, color: C.textSec, fontSize: 44, textAlign: 'center',
-          lineHeight: 1.7, marginBottom: 80, wordBreak: 'keep-all',
-        }}>
-          구독 누르고 매일 새로운<br />AI 툴 정보 받아보기 📩
-        </div>
-
-        <div style={{
-          ...btnStyle,
-          transform: `${btnStyle.transform} scale(${pulse})`,
+          ...btn,
+          transform: `${btn.transform} scale(${pulse})`,
           background: `linear-gradient(135deg, ${C.cyan}, ${C.blue})`,
-          borderRadius: 60, padding: '40px 88px',
-          color: '#fff', fontSize: 50, fontWeight: 900,
+          borderRadius: 72, padding: '44px 96px',
+          color: '#fff', fontSize: 52, fontWeight: 900,
           boxShadow: `0 0 80px ${C.cyan}55`,
+          marginBottom: 56,
         }}>
           구독 + 알림 설정 🔔
         </div>
 
-        <div style={{ marginTop: 64, color: C.textMute, fontSize: 38, textAlign: 'center' }}>
+        {/* 해시태그 */}
+        <div style={{
+          opacity: hash,
+          color: C.textMute, fontSize: 36, textAlign: 'center',
+        }}>
           #NOVA #AI툴 #오늘의AI #인공지능
         </div>
       </div>
-    </SlideWrap>
+    </AbsoluteFill>
   );
 }
 
-// ── 메인 컴포지션 ─────────────────────────────────────────────────
-export function NovaVideo({ toolName, toolDesc, bullets, steps, compareText, screenshotDataUrl }) {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-  const seg = Math.floor(durationInFrames / 5);
-  const currentSlide = Math.min(Math.floor(frame / seg), 4);
+// ── 메인 컴포지션 ────────────────────────────────────────────────
+export function NovaVideo({ toolName, hookText, bullets }) {
+  const cards = (bullets || []).slice(0, 4);
+  // 부족하면 기본값 채우기
+  while (cards.length < 4) {
+    cards.push(['핵심 작업에 특화된 AI', '무료로 바로 시작 가능', '결과물 즉시 활용', '링크는 바이오 참고'][cards.length]);
+  }
 
+  let from = 0;
   return (
     <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
-      <Sequence from={0}           durationInFrames={seg}>
-        <Slide1 toolName={toolName} toolDesc={toolDesc} screenshotDataUrl={screenshotDataUrl} />
+      {/* Hook */}
+      <Sequence from={from} durationInFrames={HOOK_DUR}>
+        <HookSlide toolName={toolName} hookText={hookText || `${toolName} 이거 알아요?`} />
       </Sequence>
-      <Sequence from={seg}         durationInFrames={seg}>
-        <Slide2 toolName={toolName} bullets={bullets} />
+
+      {/* QuickCards */}
+      {cards.map((text, i) => {
+        from = HOOK_DUR + i * CARD_DUR;
+        return (
+          <Sequence key={i} from={HOOK_DUR + i * CARD_DUR} durationInFrames={CARD_DUR}>
+            <QuickCardSlide text={text} idx={i} />
+          </Sequence>
+        );
+      })}
+
+      {/* CTA */}
+      <Sequence from={HOOK_DUR + CARD_DUR * 4} durationInFrames={CTA_DUR}>
+        <CTASlide toolName={toolName} />
       </Sequence>
-      <Sequence from={seg * 2}     durationInFrames={seg}>
-        <Slide3 toolName={toolName} compareText={compareText} />
-      </Sequence>
-      <Sequence from={seg * 3}     durationInFrames={seg}>
-        <Slide4 toolName={toolName} steps={steps} />
-      </Sequence>
-      <Sequence from={seg * 4}     durationInFrames={durationInFrames - seg * 4}>
-        <Slide5 toolName={toolName} />
-      </Sequence>
-      {/* 항상 최상위에 진행 바 표시 */}
-      <ProgressBar currentSlide={currentSlide} totalSlides={5} />
     </AbsoluteFill>
   );
 }
