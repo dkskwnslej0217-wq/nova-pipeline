@@ -527,6 +527,7 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
         max_tokens: parseInt(process.env.GROQ_MAX_TOKENS || '600'),
         temperature: 0.8,
       }),
+      signal: AbortSignal.timeout(20000),
     });
     if (!r.ok) throw new Error(`Groq ${r.status}`);
     return (await r.json()).choices[0].message.content;
@@ -537,6 +538,7 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
       method: 'POST',
       headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
+      signal: AbortSignal.timeout(25000),
     });
     if (!r.ok) throw new Error(`Claude ${r.status}`);
     return (await r.json()).content[0].text;
@@ -643,6 +645,7 @@ async function saveToSupabase(topic, content, qualityScore = 1) {
         content: content.slice(0, 1000),
         score: qualityScore,
       }),
+      signal: AbortSignal.timeout(8000),
     });
   } catch { /* 저장 실패는 파이프라인 중단하지 않음 */ }
 }
@@ -676,6 +679,7 @@ export default async function handler(req, res) {
         'Prefer': 'return=representation,resolution=ignore-duplicates',
       },
       body: JSON.stringify({ hash: lockKey, topic: '__lock__', content: 'running', score: 0 }),
+      signal: AbortSignal.timeout(10000),
     });
     lockInserted = await lockRes.json();
   } catch(e) {
@@ -848,6 +852,7 @@ export default async function handler(req, res) {
     try {
       const userRes = await fetch(`${SUPA_URL}/rest/v1/users?select=count`, {
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Prefer': 'count=exact' },
+        signal: AbortSignal.timeout(6000),
       });
       const count = parseInt(userRes.headers.get('content-range')?.split('/')[1] ?? '0');
       if (count >= 100) {
@@ -861,7 +866,7 @@ export default async function handler(req, res) {
     try {
       const logRes = await fetch(
         `${SUPA_URL}/rest/v1/publish_log?date=eq.${todayKst}&platform=eq.instagram&status=eq.success&select=id`,
-        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }, signal: AbortSignal.timeout(6000) }
       );
       const logData = await logRes.json();
       if (Array.isArray(logData) && logData.length > 0) {
@@ -883,6 +888,7 @@ export default async function handler(req, res) {
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json',
           },
+          signal: AbortSignal.timeout(10000),
           body: JSON.stringify({
             event_type: 'create-video',
             client_payload: {
