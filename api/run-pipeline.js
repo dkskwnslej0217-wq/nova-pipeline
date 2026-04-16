@@ -316,7 +316,7 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    }, 20000
+    }, 10000
   );
   if (!res.ok) throw new Error(`Gemini ${res.status}`);
   const data = await res.json();
@@ -547,7 +547,7 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
         max_tokens: parseInt(process.env.GROQ_MAX_TOKENS || '600'),
         temperature: 0.8,
       }),
-    }, 20000);
+    }, 10000);
     if (!r.ok) throw new Error(`Groq ${r.status}`);
     return (await r.json()).choices[0].message.content;
   }
@@ -557,7 +557,7 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
       method: 'POST',
       headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
-    }, 25000);
+    }, 12000);
     if (!r.ok) throw new Error(`Claude ${r.status}`);
     return (await r.json()).content[0].text;
   }
@@ -725,7 +725,7 @@ export default async function handler(req, res) {
         method: 'PATCH',
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ daily_count: 0 }),
-      }, 4000);
+      }, 2000);
     }
   } catch(e) {
     await tg(`⚠️ 사용량 초기화 실패\n${e.message}`);
@@ -750,10 +750,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // Make.com 재시도 방지: 락 통과 직후 즉시 202 응답 (타임아웃 전에)
-  // Vercel 서버리스는 응답 후에도 함수 계속 실행됨 (최대 300초)
-  res.status(202).json({ ok: true, started: true, lock: lockKey });
-
+  // 응답은 파이프라인 완료 후 전송 (Vercel Hobby는 res.send() 직후 함수 종료함)
   const startMs = Date.now();
   let igStatus = '❌', fbStatus = '❌', videoStatus = '❌';
 
@@ -763,9 +760,9 @@ export default async function handler(req, res) {
     await tg('🔄 NOVA 파이프라인 시작');
     const TREND_TIMEOUT = new Promise(resolve =>
       setTimeout(() => {
-        console.log('[NOVA] 14a 강제 타임아웃 20s — 기본값으로 진행');
+        console.log('[NOVA] 14a 강제 타임아웃 10s — 기본값으로 진행');
         resolve([null, [], [], [], [], [], [], { recent: [], topScored: [] }, null, []]);
-      }, 20000)
+      }, 10000)
     );
     const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult, crawleeTrends] = await Promise.race([
       Promise.all([
@@ -819,24 +816,10 @@ export default async function handler(req, res) {
 
     console.log(`[NOVA] 14b 툴 선정 완료: ${keywords.split('|||')[0]} (${Math.round((Date.now()-startMs)/1000)}s)`);
 
-    // 14b-2 Gemini 툴 상세 분석 (슬라이드용 실제 정보 수집)
-    const toolNameForAnalysis = keywords.split('|||')[0]?.trim() || 'AI 툴';
-    const compareForAnalysis  = keywords.split('|||')[4]?.trim() || 'ChatGPT';
-    let toolDetails = await analyzeToolDetails(toolNameForAnalysis, compareForAnalysis);
-    // research-agent의 reason_kr 주입 (있으면 슬라이드 콘텐츠에 활용)
-    if (researchResult?.reason_kr) {
-      toolDetails += `\n한국인에게 유용한 이유: ${researchResult.reason_kr}`;
-    }
-    // 공식 URL: research-agent 결과 우선, 없으면 Gemini 추출값 사용
-    const urlMatch = toolDetails.match(/공식URL:\s*(https?:\/\/[^\s]+)/);
-    const officialUrl = researchResult?.tool_url || urlMatch?.[1] || '';
-
-    console.log(`[NOVA] 14b-2 Gemini 분석 완료 (${Math.round((Date.now()-startMs)/1000)}s)`);
-    // 14c Groq
-    const hooksRaw = await generateHooks(keywords);
-    const hooks = filterKoreanOnly(hooksRaw);
-
-    console.log(`[NOVA] 14c Groq 훅 완료 (${Math.round((Date.now()-startMs)/1000)}s)`);
+    // 공식 URL: research-agent 결과만 사용 (analyzeToolDetails 제거 — 60s 예산 초과 방지)
+    const officialUrl = researchResult?.tool_url || '';
+    const toolDetails = researchResult?.reason_kr ? `한국인에게 유용한 이유: ${researchResult.reason_kr}` : '';
+    const hooks = ''; // generateHooks 제거 — 60s 예산 초과 방지
     // 14d 콘텐츠 생성 (플랫폼별)
     const { igText, fbText, ytText, imagePrompt: groqImagePrompt, compareText, comboText } = await finalizeContent(keywords, hooks, toolDetails);
     const igRaw  = filterKoreanOnly(igText);
@@ -963,11 +946,12 @@ export default async function handler(req, res) {
       `⏱️ ${elapsed}초`
     );
 
-    // 응답은 이미 위에서 보냄 (202) — 여기서 추가 응답 없음
+    // 모든 작업 완료 후 응답 (Vercel Hobby는 res.send() 직후 함수 종료 — 반드시 마지막에 보냄)
+    if (!res.headersSent) res.status(202).json({ ok: true, lock: lockKey });
 
   } catch(e) {
-    // 응답은 이미 보낸 후라 HTTP 응답 불가 → 텔레그램으로만 알림
     await tg(`❌ NOVA 파이프라인 실패\n${e.message}`);
     console.error('파이프라인 오류:', e.message);
+    if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
   }
 }
