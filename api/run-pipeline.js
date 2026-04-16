@@ -668,7 +668,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'Prefer': 'return=representation,resolution=ignore-duplicates',
       },
-      body: JSON.stringify({ hash: lockKey, topic: '__lock__', content: 'running', score: Date.now() }),
+      body: JSON.stringify({ hash: lockKey, topic: '__lock__', content: 'running', score: 0 }),
     });
     lockInserted = await lockRes.json();
   } catch(e) {
