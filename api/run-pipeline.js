@@ -23,6 +23,13 @@ const TOKEN_EXPIRES = {
   facebook:  process.env.FACEBOOK_TOKEN_EXPIRES_AT,
 };
 
+// ─── fetch with timeout (AbortController — 모든 Node.js 호환) ──────
+function ft(url, options = {}, ms = 8000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
 // ─── 중국어/외계어 제거 필터 ──────────────────────────────
 function filterKoreanOnly(text) {
   return text
@@ -39,11 +46,11 @@ function filterKoreanOnly(text) {
 // ─── Telegram 개인 알림 ───────────────────────────────────
 async function tg(msg) {
   try {
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    await ft(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: TG_CHAT, text: msg }),
-    });
+    }, 5000);
   } catch { /* 알림 실패는 무시 */ }
 }
 
@@ -51,7 +58,7 @@ async function tg(msg) {
 async function postChannel(msg) {
   if (!TG_CHANNEL || !TG_TOKEN) return;
   try {
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    await ft(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -60,7 +67,7 @@ async function postChannel(msg) {
         parse_mode: 'HTML',
         disable_web_page_preview: true,
       }),
-    });
+    }, 5000);
   } catch { /* 채널 발행 실패는 파이프라인 중단 안 함 */ }
 }
 
@@ -108,9 +115,9 @@ function formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTre
 
 // ─── 14a: YouTube TOP10 ───────────────────────────────────
 async function fetchTrending() {
-  const res = await fetch(
+  const res = await ft(
     `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=KR&maxResults=10&key=${YOUTUBE_KEY}`,
-    { signal: AbortSignal.timeout(8000) }
+    {}, 8000
   );
   if (!res.ok) throw new Error(`YouTube ${res.status}`);
   const data = await res.json();
@@ -122,9 +129,9 @@ async function fetchInstagramTop() {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN;
   const igId  = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
   if (!token || !igId) return [];
-  const res = await fetch(
+  const res = await ft(
     `https://graph.instagram.com/v21.0/${igId}/media?fields=caption,like_count&limit=20&access_token=${token}`,
-    { signal: AbortSignal.timeout(8000) }
+    {}, 8000
   );
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
@@ -146,11 +153,11 @@ async function saveTrends(hnTrends, ghTrends, redditTrends) {
     ...redditTrends.map(t => ({ source: 'reddit', title: t.slice(0, 200) })),
   ];
   if (!items.length) return;
-  await fetch(`${SUPA_URL}/rest/v1/trends`, {
+  await ft(`${SUPA_URL}/rest/v1/trends`, {
     method: 'POST',
     headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(items),
-  });
+  }, 8000);
 }
 
 // ─── research-agent 결과 읽기 (오늘→어제 폴백) ──────────
@@ -160,9 +167,9 @@ async function fetchResearchResult() {
   const yesterday = new Date(kst - 86400000).toISOString().slice(0, 10);
 
   for (const date of [today, yesterday]) {
-    const res = await fetch(
+    const res = await ft(
       `${SUPA_URL}/rest/v1/research_results?date=eq.${date}&select=tool_name,one_liner,target,price,compare_tool,reason_kr&limit=1`,
-      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }, signal: AbortSignal.timeout(8000) }
+      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }, 8000
     );
     if (!res.ok) continue;
     const rows = await res.json();
@@ -173,10 +180,9 @@ async function fetchResearchResult() {
 
 // ─── Product Hunt AI 신제품 (API 키 불필요) ───────────────
 async function fetchProductHuntAI() {
-  const res = await fetch('https://www.producthunt.com/feed?category=artificial-intelligence', {
+  const res = await ft('https://www.producthunt.com/feed?category=artificial-intelligence', {
     headers: { 'User-Agent': 'nova-pipeline/1.0' },
-    signal: AbortSignal.timeout(8000),
-  });
+  }, 8000);
   if (!res.ok) throw new Error(`ProductHunt ${res.status}`);
   const text = await res.text();
   const titles = [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g)]
@@ -189,10 +195,9 @@ async function fetchProductHuntAI() {
 
 // ─── 구글 트렌드 KR (API 키 불필요) ──────────────────────
 async function fetchGoogleTrendsKR() {
-  const res = await fetch('https://trends.google.com/trending/rss?geo=KR', {
+  const res = await ft('https://trends.google.com/trending/rss?geo=KR', {
     headers: { 'User-Agent': 'nova-pipeline/1.0' },
-    signal: AbortSignal.timeout(8000),
-  });
+  }, 8000);
   if (!res.ok) throw new Error(`Google Trends ${res.status}`);
   const text = await res.text();
   const matches = [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g)];
@@ -208,9 +213,9 @@ async function fetchRedditTrends() {
   const results = [];
   for (const sub of subs) {
     try {
-      const res = await fetch(
+      const res = await ft(
         `https://www.reddit.com/r/${sub}/hot.json?limit=5`,
-        { headers: { 'User-Agent': 'nova-pipeline/1.0' }, signal: AbortSignal.timeout(6000) }
+        { headers: { 'User-Agent': 'nova-pipeline/1.0' } }, 6000
       );
       if (!res.ok) continue;
       const data = await res.json();
@@ -225,13 +230,13 @@ async function fetchRedditTrends() {
 
 // ─── 14a-3: HackerNews AI 트렌드 ─────────────────────────
 async function fetchHNTrends() {
-  const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json', { signal: AbortSignal.timeout(8000) });
+  const idsRes = await ft('https://hacker-news.firebaseio.com/v0/topstories.json', {}, 8000);
   if (!idsRes.ok) throw new Error(`HN ${idsRes.status}`);
   const ids = await idsRes.json();
 
   const stories = await Promise.all(
     ids.slice(0, 20).map(id =>
-      fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, { signal: AbortSignal.timeout(4000) }).then(r => r.json()).catch(() => null)
+      ft(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, {}, 4000).then(r => r.json()).catch(() => null)
     )
   );
 
@@ -244,9 +249,9 @@ async function fetchHNTrends() {
 
 // ─── 14a-3: GitHub AI 트렌딩 레포 ────────────────────────
 async function fetchGitHubTrends() {
-  const res = await fetch(
+  const res = await ft(
     'https://api.github.com/search/repositories?q=topic:artificial-intelligence+topic:automation&sort=stars&order=desc&per_page=5',
-    { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${GITHUB_TOKEN}` }, signal: AbortSignal.timeout(8000) }
+    { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${GITHUB_TOKEN}` } }, 8000
   );
   if (!res.ok) throw new Error(`GitHub ${res.status}`);
   const data = await res.json();
@@ -257,9 +262,9 @@ async function fetchGitHubTrends() {
 async function fetchRecentTopics() {
   try {
     const since = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
-    const res = await fetch(
+    const res = await ft(
       `${SUPA_URL}/rest/v1/cache?topic=neq.__lock__&created_at=gte.${since}&select=topic,score&order=created_at.desc&limit=14`,
-      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }, signal: AbortSignal.timeout(8000) }
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }, 8000
     );
     if (!res.ok) return { recent: [], topScored: [] };
     const rows = await res.json();
@@ -287,14 +292,13 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
     ? `\n\n✅ 최근 반응 좋았던 주제 유형 (이런 방향으로 선정):\n${topScored.map(t => `• ${t}`).join('\n')}`
     : '';
   const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}${memorySection}${learningSection}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 실제로 사용 가능하고 한국 사용자에게 유용한 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (25자 이내)|||대상 (15자 이내)|||무료/유료/프리미엄|||비교할 대형 툴 1개 이름만 (ChatGPT/Notion/Canva/Figma/Google/YouTube 중 가장 비슷한 것)\n\n예시:\nPerplexity AI|||AI가 출처 포함해서 검색해주는 도구|||리서치하는 사람|||무료|||ChatGPT`;
-  const res = await fetch(
+  const res = await ft(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      signal: AbortSignal.timeout(20000),
-    }
+    }, 20000
   );
   if (!res.ok) throw new Error(`Gemini ${res.status}`);
   const data = await res.json();
@@ -427,14 +431,13 @@ ${compareWith}와차이: [핵심 차이 1가지, 25자]
 공식URL: [https://로 시작하는 정확한 URL, 모르면 빈칸]`;
 
   try {
-    const res = await fetch(
+    const res = await ft(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        signal: AbortSignal.timeout(20000),
-      }
+      }, 20000
     );
     if (!res.ok) return '';
     const data = await res.json();
@@ -448,7 +451,7 @@ async function generateHooks(keywords) {
   const parts = keywords.split('|||');
   const toolName   = parts[0]?.trim() || 'AI 툴';
   const compareWith = parts[4]?.trim() || 'ChatGPT';
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await ft('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -459,8 +462,7 @@ async function generateHooks(keywords) {
       ],
       max_tokens: 100,
     }),
-    signal: AbortSignal.timeout(15000),
-  });
+  }, 15000);
   if (!res.ok) throw new Error(`Groq ${res.status}`);
   const data = await res.json();
   return data.choices[0].message.content;
@@ -518,7 +520,7 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
 (딱 1줄: ${toolName}은 [상황]에, ${compareWith}은 [상황]에, 25자 이내)`;
 
   async function callGroq() {
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const r = await ft('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -527,19 +529,17 @@ async function finalizeContent(keywords, hooks, toolDetails = '') {
         max_tokens: parseInt(process.env.GROQ_MAX_TOKENS || '600'),
         temperature: 0.8,
       }),
-      signal: AbortSignal.timeout(20000),
-    });
+    }, 20000);
     if (!r.ok) throw new Error(`Groq ${r.status}`);
     return (await r.json()).choices[0].message.content;
   }
 
   async function callClaude() {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await ft('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
-      signal: AbortSignal.timeout(25000),
-    });
+    }, 25000);
     if (!r.ok) throw new Error(`Claude ${r.status}`);
     return (await r.json()).content[0].text;
   }
@@ -632,7 +632,7 @@ function patchContent(igText, score) {
 // ─── Supabase 저장 ────────────────────────────────────────
 async function saveToSupabase(topic, content, qualityScore = 1) {
   try {
-    await fetch(`${SUPA_URL}/rest/v1/cache`, {
+    await ft(`${SUPA_URL}/rest/v1/cache`, {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
@@ -645,8 +645,7 @@ async function saveToSupabase(topic, content, qualityScore = 1) {
         content: content.slice(0, 1000),
         score: qualityScore,
       }),
-      signal: AbortSignal.timeout(8000),
-    });
+    }, 8000);
   } catch { /* 저장 실패는 파이프라인 중단하지 않음 */ }
 }
 
@@ -671,7 +670,7 @@ export default async function handler(req, res) {
   // ignore-duplicates: 이미 같은 hash 있으면 INSERT 무시 → 빈 배열 반환 (원자적)
   let lockInserted;
   try {
-    const lockRes = await fetch(`${SUPA_URL}/rest/v1/cache`, {
+    const lockRes = await ft(`${SUPA_URL}/rest/v1/cache`, {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`,
@@ -679,8 +678,7 @@ export default async function handler(req, res) {
         'Prefer': 'return=representation,resolution=ignore-duplicates',
       },
       body: JSON.stringify({ hash: lockKey, topic: '__lock__', content: 'running', score: 0 }),
-      signal: AbortSignal.timeout(10000),
-    });
+    }, 10000);
     lockInserted = await lockRes.json();
   } catch(e) {
     // Supabase 접근 불가 → 안전하게 중단 (계속 진행 금지)
@@ -698,18 +696,18 @@ export default async function handler(req, res) {
   try {
     if (today.getDate() === 1) {
       // 월 1일: last_month_count 백업 + monthly_count 리셋 (원자적 RPC)
-      await fetch(`${SUPA_URL}/rest/v1/rpc/reset_monthly_counts`, {
+      await ft(`${SUPA_URL}/rest/v1/rpc/reset_monthly_counts`, {
         method: 'POST',
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
-      });
+      }, 8000);
     } else {
       // 매일: daily_count가 0보다 큰 유저만 리셋 (전체 업데이트 방지)
-      await fetch(`${SUPA_URL}/rest/v1/users?daily_count=gt.0`, {
+      await ft(`${SUPA_URL}/rest/v1/users?daily_count=gt.0`, {
         method: 'PATCH',
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ daily_count: 0 }),
-      });
+      }, 8000);
     }
   } catch(e) {
     await tg(`⚠️ 사용량 초기화 실패\n${e.message}`);
@@ -717,11 +715,11 @@ export default async function handler(req, res) {
 
   // 플랫폼 유저수 동기화 (레벨 자동 갱신)
   try {
-    await fetch('https://my-project-xi-sand-93.vercel.app/api/platform', {
+    await ft('https://my-project-xi-sand-93.vercel.app/api/platform', {
       method: 'POST',
       headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    });
+    }, 8000);
   } catch { /* 동기화 실패는 파이프라인 중단 안 함 */ }
 
   // 토큰 만료 경고
@@ -749,18 +747,28 @@ export default async function handler(req, res) {
   let igStatus = '❌', fbStatus = '❌', videoStatus = '❌';
 
   try {
-    // 14a 트렌드 수집 + 메모리 조회 (병렬)
+    // 14a 트렌드 수집 + 메모리 조회 (병렬, 글로벌 30초 타임아웃)
     console.log('[NOVA] 14a 트렌드 수집 시작');
-    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult] = await Promise.all([
-      fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
-      fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
-      fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
-      fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패 → 폴백\n${e.message}`); return []; }),
-      fetchInstagramTop().catch(e => { tg(`⚠️ 인스타 분석 실패 (권한 확인 필요)\n${e.message}`); return []; }),
-      fetchGoogleTrendsKR().catch(() => []),
-      fetchProductHuntAI().catch(() => []),
-      fetchRecentTopics().catch(() => ({ recent: [], topScored: [] })),
-      fetchResearchResult().catch(() => null),
+    await tg('🔄 NOVA 파이프라인 시작');
+    const TREND_TIMEOUT = new Promise(resolve =>
+      setTimeout(() => {
+        console.log('[NOVA] 14a 강제 타임아웃 30s — 기본값으로 진행');
+        resolve([null, [], [], [], [], [], [], { recent: [], topScored: [] }, null]);
+      }, 30000)
+    );
+    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult] = await Promise.race([
+      Promise.all([
+        fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
+        fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
+        fetchGitHubTrends().catch(e => { tg(`⚠️ GitHub 수집 실패\n${e.message}`); return []; }),
+        fetchRedditTrends().catch(e => { tg(`⚠️ Reddit 수집 실패 → 폴백\n${e.message}`); return []; }),
+        fetchInstagramTop().catch(e => { tg(`⚠️ 인스타 분석 실패 (권한 확인 필요)\n${e.message}`); return []; }),
+        fetchGoogleTrendsKR().catch(() => []),
+        fetchProductHuntAI().catch(() => []),
+        fetchRecentTopics().catch(() => ({ recent: [], topScored: [] })),
+        fetchResearchResult().catch(() => null),
+      ]),
+      TREND_TIMEOUT,
     ]);
     const trendSummary = [
       hnTrends.length     ? `🔥 HN:\n${hnTrends.slice(0,3).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
@@ -850,10 +858,9 @@ export default async function handler(req, res) {
 
     // 유저 수 체크 → 100명 도달 시 알림
     try {
-      const userRes = await fetch(`${SUPA_URL}/rest/v1/users?select=count`, {
+      const userRes = await ft(`${SUPA_URL}/rest/v1/users?select=count`, {
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Prefer': 'count=exact' },
-        signal: AbortSignal.timeout(6000),
-      });
+      }, 6000);
       const count = parseInt(userRes.headers.get('content-range')?.split('/')[1] ?? '0');
       if (count >= 100) {
         await tg(`🎉 유저 100명 돌파! (현재 ${count}명)\n👉 토스페이먼츠 자동 결제 연동할 때입니다.`);
@@ -864,9 +871,9 @@ export default async function handler(req, res) {
     const todayKst = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
     let alreadyPublished = false;
     try {
-      const logRes = await fetch(
+      const logRes = await ft(
         `${SUPA_URL}/rest/v1/publish_log?date=eq.${todayKst}&platform=eq.instagram&status=eq.success&select=id`,
-        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }, signal: AbortSignal.timeout(6000) }
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }, 6000
       );
       const logData = await logRes.json();
       if (Array.isArray(logData) && logData.length > 0) {
@@ -879,7 +886,7 @@ export default async function handler(req, res) {
       await tg(`⏭️ 오늘 Instagram 이미 발행됨 — 영상 파이프라인 스킵`);
     } else
     try {
-      const dispatchRes = await fetch(
+      const dispatchRes = await ft(
         `https://api.github.com/repos/${GITHUB_REPO}/dispatches`,
         {
           method: 'POST',
@@ -888,7 +895,6 @@ export default async function handler(req, res) {
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json',
           },
-          signal: AbortSignal.timeout(10000),
           body: JSON.stringify({
             event_type: 'create-video',
             client_payload: {
@@ -902,7 +908,7 @@ export default async function handler(req, res) {
               ig_slides:    igFinal || igText || '',
             },
           }),
-        }
+        }, 10000
       );
       if (dispatchRes.ok) {
         videoStatus = '✅';
