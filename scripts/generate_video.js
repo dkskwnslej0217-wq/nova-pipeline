@@ -734,12 +734,15 @@ asyncio.run(main())
       } catch (e) {
         const errMsg = e.message || '';
         // 차단/스팸 감지 에러코드 — 즉시 중단 (재시도 금지)
-        const isBanned = errMsg.includes('190') || errMsg.includes('368') ||
-                         errMsg.includes('32') || errMsg.includes('spam') ||
-                         errMsg.includes('blocked') || errMsg.includes('restricted');
-        const isRateLimited = errMsg.toLowerCase().includes('request limit reached') ||
-                              errMsg.toLowerCase().includes('rate limit') ||
-                              errMsg.includes('4'); // IG 에러코드 4 = app rate limit
+        // IG 에러코드 정확히 매칭 (숫자 문자열 포함 방지)
+        const errLower = errMsg.toLowerCase();
+        const isBanned = errMsg.includes('"code":190') || errMsg.includes('"code":368') ||
+                         errMsg.includes('"code":32') ||
+                         errLower.includes('spam') || errLower.includes('blocked') ||
+                         errLower.includes('restricted') || errLower.includes('action is blocked');
+        const isRateLimited = errLower.includes('request limit reached') ||
+                              errLower.includes('rate limit') ||
+                              errMsg.includes('"code":4,') || errMsg.includes('"code":4}'); // IG 에러코드 4 = app rate limit
         igStatus = `❌ ${errMsg.slice(0, 60)}`;
         // 한도 초과는 오늘 재시도 금지 (rate_limited 상태로 저장)
         const logStatus = isRateLimited ? 'rate_limited' : 'failed';

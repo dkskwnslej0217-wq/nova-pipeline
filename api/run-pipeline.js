@@ -160,6 +160,24 @@ async function saveTrends(hnTrends, ghTrends, redditTrends) {
   }, 8000);
 }
 
+// ─── crawlee-agent trend_sources 읽기 ────────────────────
+async function fetchTrendSources() {
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() + 9 * 3600000 - 86400000).toISOString().slice(0, 10);
+  for (const date of [today, yesterday]) {
+    try {
+      const res = await ft(
+        `${SUPA_URL}/rest/v1/trend_sources?date=eq.${date}&source=neq.groq_summary&select=source,title,description&order=score.desc&limit=20`,
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }, 6000
+      );
+      if (!res.ok) continue;
+      const rows = await res.json();
+      if (rows.length) return rows.map(r => `[${r.source}] ${r.title}: ${(r.description || '').slice(0, 80)}`);
+    } catch { continue; }
+  }
+  return [];
+}
+
 // ─── research-agent 결과 읽기 (오늘→어제 폴백) ──────────
 async function fetchResearchResult() {
   const kst = new Date(Date.now() + 9 * 3600000);
@@ -713,14 +731,7 @@ export default async function handler(req, res) {
     await tg(`⚠️ 사용량 초기화 실패\n${e.message}`);
   }
 
-  // 플랫폼 유저수 동기화 (레벨 자동 갱신)
-  try {
-    await ft('https://my-project-xi-sand-93.vercel.app/api/platform', {
-      method: 'POST',
-      headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    }, 4000);
-  } catch { /* 동기화 실패는 파이프라인 중단 안 함 */ }
+  // 플랫폼 유저수 동기화 비활성화 (연결 없는 외부 URL — 4s 낭비 방지)
 
   // 토큰 만료 경고
   const now = Date.now();
@@ -753,10 +764,10 @@ export default async function handler(req, res) {
     const TREND_TIMEOUT = new Promise(resolve =>
       setTimeout(() => {
         console.log('[NOVA] 14a 강제 타임아웃 20s — 기본값으로 진행');
-        resolve([null, [], [], [], [], [], [], { recent: [], topScored: [] }, null]);
+        resolve([null, [], [], [], [], [], [], { recent: [], topScored: [] }, null, []]);
       }, 20000)
     );
-    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult] = await Promise.race([
+    const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult, crawleeTrends] = await Promise.race([
       Promise.all([
         fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
         fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
@@ -767,6 +778,7 @@ export default async function handler(req, res) {
         fetchProductHuntAI().catch(() => []),
         fetchRecentTopics().catch(() => ({ recent: [], topScored: [] })),
         fetchResearchResult().catch(() => null),
+        fetchTrendSources().catch(() => []),
       ]),
       TREND_TIMEOUT,
     ]);
@@ -790,7 +802,7 @@ export default async function handler(req, res) {
     } else {
       // 폴백: 기존 Gemini 툴 선정
       try {
-        keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored);
+        keywords = await extractKeywords(titles ?? [], hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory.recent, memory.topScored, crawleeTrends);
         if (!keywords.includes('|||')) {
           const fallbackTool = phTrends[0] || hnTrends[0] || 'Perplexity AI';
           keywords = `${fallbackTool}|||AI 검색 및 리서치 도구|||리서치·공부하는 사람|||무료`;
