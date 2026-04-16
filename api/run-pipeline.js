@@ -678,7 +678,7 @@ export default async function handler(req, res) {
         'Prefer': 'return=representation,resolution=ignore-duplicates',
       },
       body: JSON.stringify({ hash: lockKey, topic: '__lock__', content: 'running', score: 0 }),
-    }, 10000);
+    }, 4000);
     lockInserted = await lockRes.json();
   } catch(e) {
     // Supabase 접근 불가 → 안전하게 중단 (계속 진행 금지)
@@ -700,14 +700,14 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
-      }, 8000);
+      }, 4000);
     } else {
       // 매일: daily_count가 0보다 큰 유저만 리셋 (전체 업데이트 방지)
       await ft(`${SUPA_URL}/rest/v1/users?daily_count=gt.0`, {
         method: 'PATCH',
         headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ daily_count: 0 }),
-      }, 8000);
+      }, 4000);
     }
   } catch(e) {
     await tg(`⚠️ 사용량 초기화 실패\n${e.message}`);
@@ -719,7 +719,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { 'x-pipeline-secret': PIPELINE_SECRET, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    }, 8000);
+    }, 4000);
   } catch { /* 동기화 실패는 파이프라인 중단 안 함 */ }
 
   // 토큰 만료 경고
@@ -747,14 +747,14 @@ export default async function handler(req, res) {
   let igStatus = '❌', fbStatus = '❌', videoStatus = '❌';
 
   try {
-    // 14a 트렌드 수집 + 메모리 조회 (병렬, 글로벌 30초 타임아웃)
+    // 14a 트렌드 수집 + 메모리 조회 (병렬, 글로벌 20초 타임아웃)
     console.log('[NOVA] 14a 트렌드 수집 시작');
     await tg('🔄 NOVA 파이프라인 시작');
     const TREND_TIMEOUT = new Promise(resolve =>
       setTimeout(() => {
-        console.log('[NOVA] 14a 강제 타임아웃 30s — 기본값으로 진행');
+        console.log('[NOVA] 14a 강제 타임아웃 20s — 기본값으로 진행');
         resolve([null, [], [], [], [], [], [], { recent: [], topScored: [] }, null]);
-      }, 30000)
+      }, 20000)
     );
     const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult] = await Promise.race([
       Promise.all([
