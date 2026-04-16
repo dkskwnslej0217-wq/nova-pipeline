@@ -162,7 +162,7 @@ async function fetchResearchResult() {
   for (const date of [today, yesterday]) {
     const res = await fetch(
       `${SUPA_URL}/rest/v1/research_results?date=eq.${date}&select=tool_name,one_liner,target,price,compare_tool,reason_kr&limit=1`,
-      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+      { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }, signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) continue;
     const rows = await res.json();
@@ -259,7 +259,7 @@ async function fetchRecentTopics() {
     const since = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
     const res = await fetch(
       `${SUPA_URL}/rest/v1/cache?topic=neq.__lock__&created_at=gte.${since}&select=topic,score&order=created_at.desc&limit=14`,
-      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }, signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return { recent: [], topScored: [] };
     const rows = await res.json();
@@ -293,6 +293,7 @@ async function extractKeywords(titles, hnTrends = [], ghTrends = [], redditTrend
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      signal: AbortSignal.timeout(20000),
     }
   );
   if (!res.ok) throw new Error(`Gemini ${res.status}`);
