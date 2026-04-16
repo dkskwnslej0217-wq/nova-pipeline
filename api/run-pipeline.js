@@ -109,7 +109,8 @@ function formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTre
 // ─── 14a: YouTube TOP10 ───────────────────────────────────
 async function fetchTrending() {
   const res = await fetch(
-    `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=KR&maxResults=10&key=${YOUTUBE_KEY}`
+    `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&regionCode=KR&maxResults=10&key=${YOUTUBE_KEY}`,
+    { signal: AbortSignal.timeout(8000) }
   );
   if (!res.ok) throw new Error(`YouTube ${res.status}`);
   const data = await res.json();
@@ -122,7 +123,8 @@ async function fetchInstagramTop() {
   const igId  = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
   if (!token || !igId) return [];
   const res = await fetch(
-    `https://graph.instagram.com/v21.0/${igId}/media?fields=caption,like_count&limit=20&access_token=${token}`
+    `https://graph.instagram.com/v21.0/${igId}/media?fields=caption,like_count&limit=20&access_token=${token}`,
+    { signal: AbortSignal.timeout(8000) }
   );
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
@@ -173,6 +175,7 @@ async function fetchResearchResult() {
 async function fetchProductHuntAI() {
   const res = await fetch('https://www.producthunt.com/feed?category=artificial-intelligence', {
     headers: { 'User-Agent': 'nova-pipeline/1.0' },
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`ProductHunt ${res.status}`);
   const text = await res.text();
@@ -188,6 +191,7 @@ async function fetchProductHuntAI() {
 async function fetchGoogleTrendsKR() {
   const res = await fetch('https://trends.google.com/trending/rss?geo=KR', {
     headers: { 'User-Agent': 'nova-pipeline/1.0' },
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`Google Trends ${res.status}`);
   const text = await res.text();
@@ -206,7 +210,7 @@ async function fetchRedditTrends() {
     try {
       const res = await fetch(
         `https://www.reddit.com/r/${sub}/hot.json?limit=5`,
-        { headers: { 'User-Agent': 'nova-pipeline/1.0' } }
+        { headers: { 'User-Agent': 'nova-pipeline/1.0' }, signal: AbortSignal.timeout(6000) }
       );
       if (!res.ok) continue;
       const data = await res.json();
@@ -221,13 +225,13 @@ async function fetchRedditTrends() {
 
 // ─── 14a-3: HackerNews AI 트렌드 ─────────────────────────
 async function fetchHNTrends() {
-  const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
+  const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json', { signal: AbortSignal.timeout(8000) });
   if (!idsRes.ok) throw new Error(`HN ${idsRes.status}`);
   const ids = await idsRes.json();
 
   const stories = await Promise.all(
-    ids.slice(0, 30).map(id =>
-      fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(r => r.json()).catch(() => null)
+    ids.slice(0, 20).map(id =>
+      fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, { signal: AbortSignal.timeout(4000) }).then(r => r.json()).catch(() => null)
     )
   );
 
@@ -242,7 +246,7 @@ async function fetchHNTrends() {
 async function fetchGitHubTrends() {
   const res = await fetch(
     'https://api.github.com/search/repositories?q=topic:artificial-intelligence+topic:automation&sort=stars&order=desc&per_page=5',
-    { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${GITHUB_TOKEN}` } }
+    { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${GITHUB_TOKEN}` }, signal: AbortSignal.timeout(8000) }
   );
   if (!res.ok) throw new Error(`GitHub ${res.status}`);
   const data = await res.json();
@@ -428,6 +432,7 @@ ${compareWith}와차이: [핵심 차이 1가지, 25자]
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        signal: AbortSignal.timeout(20000),
       }
     );
     if (!res.ok) return '';
@@ -453,6 +458,7 @@ async function generateHooks(keywords) {
       ],
       max_tokens: 100,
     }),
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}`);
   const data = await res.json();
@@ -739,6 +745,7 @@ export default async function handler(req, res) {
 
   try {
     // 14a 트렌드 수집 + 메모리 조회 (병렬)
+    console.log('[NOVA] 14a 트렌드 수집 시작');
     const [titles, hnTrends, ghTrends, redditTrends, igTop, googleTrends, phTrends, memory, researchResult] = await Promise.all([
       fetchTrending().catch(e => { tg(`⚠️ YouTube 수집 실패\n${e.message}`); return null; }),
       fetchHNTrends().catch(e => { tg(`⚠️ HN 수집 실패\n${e.message}`); return []; }),
@@ -758,6 +765,7 @@ export default async function handler(req, res) {
       googleTrends.length ? `🇰🇷 구글 트렌드:\n${googleTrends.slice(0,3).map(t => `• ${t}`).join('\n')}` : '',
       phTrends.length     ? `🚀 PH AI:\n${phTrends.slice(0,3).map(t => `• ${t.slice(0,60)}`).join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
+    console.log(`[NOVA] 14a 완료 (${Math.round((Date.now()-startMs)/1000)}s) HN:${hnTrends.length} GH:${ghTrends.length} PH:${phTrends.length} research:${!!researchResult}`);
     saveTrends(hnTrends, ghTrends, redditTrends).catch(e => tg(`⚠️ 트렌드 저장 실패\n${e.message}`));
 
     // 14b 툴 선정 — research-agent 결과 우선, 없으면 Gemini
@@ -784,6 +792,8 @@ export default async function handler(req, res) {
     const channelPost = formatChannelPost(hnTrends, redditTrends, ghTrends, googleTrends, phTrends, keywords);
     postChannel(channelPost); // 비동기, 실패해도 파이프라인 계속
 
+    console.log(`[NOVA] 14b 툴 선정 완료: ${keywords.split('|||')[0]} (${Math.round((Date.now()-startMs)/1000)}s)`);
+
     // 14b-2 Gemini 툴 상세 분석 (슬라이드용 실제 정보 수집)
     const toolNameForAnalysis = keywords.split('|||')[0]?.trim() || 'AI 툴';
     const compareForAnalysis  = keywords.split('|||')[4]?.trim() || 'ChatGPT';
@@ -796,16 +806,19 @@ export default async function handler(req, res) {
     const urlMatch = toolDetails.match(/공식URL:\s*(https?:\/\/[^\s]+)/);
     const officialUrl = researchResult?.tool_url || urlMatch?.[1] || '';
 
+    console.log(`[NOVA] 14b-2 Gemini 분석 완료 (${Math.round((Date.now()-startMs)/1000)}s)`);
     // 14c Groq
     const hooksRaw = await generateHooks(keywords);
     const hooks = filterKoreanOnly(hooksRaw);
 
+    console.log(`[NOVA] 14c Groq 훅 완료 (${Math.round((Date.now()-startMs)/1000)}s)`);
     // 14d 콘텐츠 생성 (플랫폼별)
     const { igText, fbText, ytText, imagePrompt: groqImagePrompt, compareText, comboText } = await finalizeContent(keywords, hooks, toolDetails);
     const igRaw  = filterKoreanOnly(igText);
     const fbFinal = filterKoreanOnly(fbText);
     const ytFinal = filterKoreanOnly(ytText);
 
+    console.log(`[NOVA] 14d 콘텐츠 생성 완료 (${Math.round((Date.now()-startMs)/1000)}s)`);
     // ── 품질 채점 ───────────────────────────────────────────
     const toolName = keywords.split('|||')[0]?.trim() || 'AI툴';
     let igFinal = igRaw;
