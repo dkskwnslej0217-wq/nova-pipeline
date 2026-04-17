@@ -1,6 +1,8 @@
 name: Create Video
 
 on:
+  schedule:
+    - cron: '0 23 * * *'  # 매일 08:00 KST (23:00 UTC)
   repository_dispatch:
     types: [create-video]
   workflow_dispatch:
