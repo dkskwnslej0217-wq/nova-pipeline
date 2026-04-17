@@ -15,7 +15,8 @@ const {
   INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_BUSINESS_ACCOUNT_ID,
   FACEBOOK_ACCESS_TOKEN, FACEBOOK_PAGE_ID,
   YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN,
-  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_CHANNEL_ID,
+  GEMINI_API_KEY, GROQ_API_KEY, ANTHROPIC_API_KEY,
 } = process.env;
 
 // ── Chromium 경로 탐색 ────────────────────────────────────────────
@@ -626,15 +627,348 @@ async function upsertPublishLog(date, platform, status, { postId = null, errorMs
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// AI 파이프라인 (트렌드 수집 → 툴 선정 → 콘텐츠 생성)
+// SCRIPT_TEXT 없을 때 자동 실행 — Vercel에서 옮겨온 로직
+// ═══════════════════════════════════════════════════════════════════
+
+function ft(url, options = {}, ms = 10000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
+function filterKoreanOnly(text) {
+  if (!text) return '';
+  return text
+    .replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '')
+    .replace(/[\u3000-\u303F]/g, '')
+    .replace(/[\u0600-\u06FF]/g, '')
+    .replace(/[\u0400-\u04FF]/g, '')
+    .replace(/[\u0900-\u097F]/g, '')
+    .replace(/[\u0080-\u00FF]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function getContentContext() {
+  const day = new Date(Date.now() + 9 * 3600000).getDay();
+  const cats = {
+    0: '이번 주 베스트 AI 툴 TOP3',
+    1: '생산성 AI 툴 — 업무 효율 올리는 것',
+    2: '글쓰기·번역 AI 툴',
+    3: '이미지·영상 생성 AI 툴',
+    4: '자동화·코딩 AI 툴',
+    5: '무료로 쓸 수 있는 AI 툴',
+    6: '이번 주 AI 뉴스 & 새 툴 총정리',
+  };
+  return { dayCategory: cats[day], fullContext: `[오늘 카테고리] ${cats[day]}` };
+}
+
+async function fetchTrendSources() {
+  const kst = new Date(Date.now() + 9 * 3600000);
+  for (const d of [kst.toISOString().slice(0, 10), new Date(kst - 86400000).toISOString().slice(0, 10)]) {
+    try {
+      const res = await ft(
+        `${SUPABASE_URL}/rest/v1/trend_sources?date=eq.${d}&source=neq.groq_summary&select=source,title,description&order=score.desc&limit=20`,
+        { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }, 8000
+      );
+      if (!res.ok) continue;
+      const rows = await res.json();
+      if (rows.length) return rows.map(r => `[${r.source}] ${r.title}: ${(r.description || '').slice(0, 80)}`);
+    } catch { continue; }
+  }
+  return [];
+}
+
+async function fetchResearchResult() {
+  const kst = new Date(Date.now() + 9 * 3600000);
+  for (const d of [kst.toISOString().slice(0, 10), new Date(kst - 86400000).toISOString().slice(0, 10)]) {
+    try {
+      const res = await ft(
+        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}&select=tool_name,one_liner,target,price,compare_tool,reason_kr,tool_url&limit=1`,
+        { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }, 8000
+      );
+      if (!res.ok) continue;
+      const rows = await res.json();
+      if (rows.length) return rows[0];
+    } catch { continue; }
+  }
+  return null;
+}
+
+async function fetchHNTrends() {
+  const idsRes = await ft('https://hacker-news.firebaseio.com/v0/topstories.json', {}, 8000);
+  if (!idsRes.ok) return [];
+  const ids = await idsRes.json();
+  const stories = await Promise.all(
+    ids.slice(0, 20).map(id =>
+      ft(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, {}, 4000).then(r => r.json()).catch(() => null)
+    )
+  );
+  const kw = ['ai', 'llm', 'gpt', 'automation', 'agent', 'claude', 'openai', 'gemini', 'machine learning'];
+  return stories.filter(s => s?.title && kw.some(k => s.title.toLowerCase().includes(k))).slice(0, 5).map(s => s.title);
+}
+
+async function fetchRedditTrends() {
+  const results = [];
+  for (const sub of ['artificial', 'ChatGPT', 'SideProject']) {
+    try {
+      const res = await ft(`https://www.reddit.com/r/${sub}/hot.json?limit=5`, { headers: { 'User-Agent': 'nova-pipeline/1.0' } }, 6000);
+      if (!res.ok) continue;
+      const data = await res.json();
+      results.push(...data.data.children.map(p => p.data.title).filter(t => t.length < 120).slice(0, 2));
+    } catch { continue; }
+  }
+  return results.slice(0, 6);
+}
+
+async function fetchProductHuntAI() {
+  try {
+    const res = await ft('https://www.producthunt.com/feed?category=artificial-intelligence', { headers: { 'User-Agent': 'nova-pipeline/1.0' } }, 8000);
+    if (!res.ok) return [];
+    const text = await res.text();
+    return [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g)]
+      .map(m => (m[1] || m[2] || '').trim())
+      .filter(t => t && t !== 'Product Hunt – The best new products, every day')
+      .slice(0, 5);
+  } catch { return []; }
+}
+
+async function fetchGoogleTrendsKR() {
+  try {
+    const res = await ft('https://trends.google.com/trending/rss?geo=KR', { headers: { 'User-Agent': 'nova-pipeline/1.0' } }, 8000);
+    if (!res.ok) return [];
+    const text = await res.text();
+    return [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g)]
+      .map(m => (m[1] || m[2] || '').trim())
+      .filter(t => t && t !== 'Daily Search Trends')
+      .slice(0, 5);
+  } catch { return []; }
+}
+
+async function fetchRecentTopics() {
+  try {
+    const since = new Date(Date.now() - 7 * 86400000).toISOString();
+    const res = await ft(
+      `${SUPABASE_URL}/rest/v1/cache?topic=neq.__lock__&created_at=gte.${since}&select=topic,score&order=created_at.desc&limit=14`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }, 8000
+    );
+    if (!res.ok) return { recent: [], topScored: [] };
+    const rows = await res.json();
+    return {
+      recent: rows.map(r => r.topic).filter(Boolean),
+      topScored: rows.filter(r => r.score >= 80).map(r => r.topic).slice(0, 3),
+    };
+  } catch { return { recent: [], topScored: [] }; }
+}
+
+async function extractKeywords(hnTrends = [], ghTrends = [], redditTrends = [], phTrends = [], crawleeTrends = [], recentTopics = [], topScored = []) {
+  const trim = (arr, n = 5) => arr.slice(0, n).map(s => String(s).slice(0, 80));
+  const ctx = getContentContext();
+  const context = [
+    phTrends.length  ? `[Product Hunt AI 신제품]\n${trim(phTrends).join('\n')}` : '',
+    hnTrends.length  ? `[HackerNews]\n${trim(hnTrends).join('\n')}` : '',
+    redditTrends.length ? `[Reddit]\n${trim(redditTrends).join('\n')}` : '',
+    crawleeTrends.length ? `[crawlee-agent 수집]\n${trim(crawleeTrends, 8).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  const memorySection = recentTopics.length ? `\n\n⛔ 최근 7일 이미 소개한 툴 (중복 금지):\n${recentTopics.map(t => `• ${t}`).join('\n')}` : '';
+  const learningSection = topScored.length ? `\n\n✅ 최근 반응 좋았던 주제:\n${topScored.map(t => `• ${t}`).join('\n')}` : '';
+
+  const prompt = `아래는 오늘 글로벌에서 주목받는 새 AI 툴·서비스 목록입니다:\n${context}${memorySection}${learningSection}\n\n오늘 카테고리: ${ctx.dayCategory}\n\n위 데이터에서 오늘 소개할 AI 툴 1개를 선정해. 실제로 사용 가능하고 한국 사용자에게 유용한 것.\n\n반드시 아래 형식 그대로 반환 (다른 말 없이):\n툴이름|||한 줄 설명 (25자 이내)|||대상 (15자 이내)|||무료/유료/프리미엄|||비교할 대형 툴 1개 이름만\n\n예시:\nPerplexity AI|||AI가 출처 포함해서 검색해주는 도구|||리서치하는 사람|||무료|||ChatGPT`;
+
+  const res = await ft(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${GEMINI_API_KEY}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) },
+    15000
+  );
+  if (!res.ok) throw new Error(`Gemini ${res.status}`);
+  const data = await res.json();
+  return data.candidates[0].content.parts[0].text.trim();
+}
+
+async function finalizeContent(keywords) {
+  const parts = keywords.split('|||');
+  const toolName    = parts[0]?.trim() || 'AI 툴';
+  const toolDesc    = parts[1]?.trim() || '';
+  const toolTarget  = parts[2]?.trim() || '';
+  const toolPrice   = parts[3]?.trim() || '';
+  const compareWith = parts[4]?.trim() || 'ChatGPT';
+  const ctx = getContentContext();
+
+  const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
+  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}
+오늘 카테고리: ${ctx.dayCategory}
+금지어: "안녕하세요" "여러분" "오늘은" "확실히" "물론" "정말"
+
+아래 구분자 그대로 작성:
+
+===IG===
+(인스타 캐러셀 7장. [S번호] 형식. 한국어만. 해시태그 없이.)
+[S1] ${toolName} — [핵심 한 줄 설명, 20자 이내]
+[S2] ${compareWith} 쓸 때 이런 불편 없으세요?\n• [불편1]\n• [불편2]\n• [불편3]
+[S3] 실제 사용 예시\n입력: [예시]\n    ↓\n출력: [결과]
+[S4] 사용법 3단계\n① [단계1]\n② [단계2]\n③ [단계3]
+[S5] ${compareWith} vs ${toolName}\n속도: [비교]\n가격: [비교]\n정확도: [비교]
+[S6] ✅ 추천: [이런 분]\n❌ 비추천: [이런 분]
+[S7] 지금 무료로 시작 가능 → 링크는 바이오 참고 🔗
+
+===YT===
+(나레이션 60초. 말하듯 자연스럽게. 350~450자.
+1. 후킹 — ${compareWith} 쓸 때 겪는 불편함
+2. 소개 — ${toolName}이 뭘 하는지
+3. 장점 — ${compareWith}보다 나은 점
+4. 단점 — 솔직하게 1가지
+5. 추천 대상 — 구체적으로
+6. CTA — 구독+알림 1문장)`;
+
+  async function callGroq() {
+    const r = await ft('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }], max_tokens: 600, temperature: 0.8 }),
+    }, 15000);
+    if (!r.ok) throw new Error(`Groq ${r.status}`);
+    return (await r.json()).choices[0].message.content;
+  }
+
+  async function callClaude() {
+    const r = await ft('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
+    }, 20000);
+    if (!r.ok) throw new Error(`Claude ${r.status}`);
+    return (await r.json()).content[0].text;
+  }
+
+  let raw;
+  try { raw = await callGroq(); } catch { raw = await callClaude(); }
+
+  const extract = (tag) => {
+    const m = raw.match(new RegExp(`===${tag}===\\n([\\s\\S]*?)(?====|$)`));
+    return m ? m[1].trim() : '';
+  };
+  return { igText: extract('IG'), ytText: extract('YT') };
+}
+
+const EMOTION_WORDS = ['충격', '반전', '실화', '경고', '주의', '놀라운', '무료', '비밀', '진짜', '드디어'];
+const CTA_WORDS     = ['저장', '공유', '팔로우', '구독', '알림', '댓글', '링크', '지금', '시작'];
+const TREND_WORDS   = ['ai', 'gpt', '자동화', '챗봇', '무료', '최신'];
+
+function scoreContent(igText, keywords) {
+  let score = 0;
+  const lines = igText.split('\n').filter(Boolean);
+  const first = lines[0] || '';
+  const full = igText.toLowerCase();
+  const toolName = (keywords.split('|||')[0] || '').toLowerCase().trim();
+  if (/\d/.test(first))                                     score += 5;
+  if (EMOTION_WORDS.some(w => first.includes(w)))          score += 5;
+  if (first.length <= 30)                                   score += 5;
+  if (/[?！!]/.test(first) || first.includes('이유'))      score += 5;
+  if (toolName && full.includes(toolName))                  score += 5;
+  if (first.length >= 10)                                   score += 10;
+  if (lines.length >= 4)                                    score += 5;
+  if (!lines.some(l => l.length > 80))                     score += 5;
+  if (CTA_WORDS.some(w => full.includes(w)))               score += 5;
+  if (igText.length >= 100 && igText.length <= 2200)       score += 10;
+  if (/[\u{1F300}-\u{1FFFF}]/u.test(igText))               score += 5;
+  if (TREND_WORDS.some(w => full.includes(w)))             score += 10;
+  if (lines.length >= 5)                                    score += 10;
+  if (!igText.includes('안녕하세요') && !igText.includes('여러분')) score += 5;
+  return Math.min(score, 100);
+}
+
+async function saveToSupabaseCache(topic, content, qualityScore = 1) {
+  try {
+    await ft(`${SUPABASE_URL}/rest/v1/cache`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hash: `${btoa(encodeURIComponent(topic)).slice(0, 24)}_${Date.now()}`, topic, content: content.slice(0, 1000), score: qualityScore }),
+    }, 8000);
+  } catch { /* 저장 실패는 파이프라인 중단하지 않음 */ }
+}
+
 // ── 메인 ──────────────────────────────────────────────────────────
 async function run() {
-  const scriptText = (SCRIPT_TEXT || 'NOVA AI 자동화 콘텐츠입니다.').slice(0, 2500);
-  const title      = SCRIPT_TITLE || 'NOVA AI';
-  const tags       = (SCRIPT_TAGS || '').split(',').map(t => t.trim()).filter(Boolean);
-  const toolName   = SCRIPT_TOOL_NAME || title.replace('오늘의 AI 툴: ', '').trim();
-  const compareWith = SCRIPT_COMPARE  || '';
-  const combo       = SCRIPT_COMBO    || '';
-  const toolUrl     = SCRIPT_TOOL_URL || '';
+  // ── 0. AI 파이프라인 (SCRIPT_TEXT 없을 때 자동 실행) ────────────
+  let scriptTextRaw = (SCRIPT_TEXT || '').trim();
+  let igSlidesInput = (SCRIPT_IG_SLIDES || '').trim();
+  let titleInput    = SCRIPT_TITLE || '';
+  let toolNameInput = SCRIPT_TOOL_NAME || '';
+  let compareInput  = SCRIPT_COMPARE || '';
+  let comboInput    = SCRIPT_COMBO || '';
+  let toolUrlInput  = SCRIPT_TOOL_URL || '';
+
+  if (!scriptTextRaw) {
+    console.log('\n🤖 AI 파이프라인 시작 (트렌드 수집 → 툴 선정 → 콘텐츠 생성)');
+    await tg('🔄 NOVA 파이프라인 시작');
+
+    // 트렌드 병렬 수집
+    const [hn, reddit, ph, googleTr, crawlee, research, memory] = await Promise.allSettled([
+      fetchHNTrends(),
+      fetchRedditTrends(),
+      fetchProductHuntAI(),
+      fetchGoogleTrendsKR(),
+      fetchTrendSources(),
+      fetchResearchResult(),
+      fetchRecentTopics(),
+    ]).then(r => r.map(x => x.status === 'fulfilled' ? x.value : (x.value?.recent !== undefined ? { recent: [], topScored: [] } : [])));
+
+    console.log(`  HN:${hn?.length||0} Reddit:${reddit?.length||0} PH:${ph?.length||0} crawlee:${crawlee?.length||0} research:${!!research?.tool_name}`);
+
+    // 툴 선정
+    let keywords;
+    if (research?.tool_name) {
+      keywords = `${research.tool_name}|||${research.one_liner||''}|||${research.target||''}|||${research.price||''}|||${research.compare_tool||'ChatGPT'}`;
+      console.log(`✅ research-agent 사용: ${research.tool_name}`);
+    } else {
+      try {
+        keywords = await extractKeywords(hn||[], [], reddit||[], ph||[], crawlee||[], memory?.recent||[], memory?.topScored||[]);
+        if (!keywords.includes('|||')) {
+          keywords = `${ph?.[0] || hn?.[0] || 'Perplexity AI'}|||AI 검색 도구|||리서치하는 사람|||무료|||ChatGPT`;
+        }
+      } catch(e) {
+        console.warn(`⚠️ Gemini 실패: ${e.message}`);
+        keywords = 'Perplexity AI|||실시간 검색 + AI 답변 통합|||리서치하는 모든 사람|||무료|||ChatGPT';
+      }
+    }
+
+    // 콘텐츠 생성
+    let igText = '', ytText = '';
+    try {
+      const result = await finalizeContent(keywords);
+      igText = filterKoreanOnly(result.igText) || '';
+      ytText = filterKoreanOnly(result.ytText) || '';
+    } catch(e) {
+      console.warn(`⚠️ 콘텐츠 생성 실패: ${e.message}`);
+    }
+
+    // 변수 설정
+    const parts = keywords.split('|||');
+    toolNameInput = parts[0]?.trim() || 'AI 툴';
+    compareInput  = parts[4]?.trim() || 'ChatGPT';
+    titleInput    = `오늘의 AI 툴: ${toolNameInput}`;
+    scriptTextRaw = ytText || `${toolNameInput} — AI 자동화 도구 소개`;
+    igSlidesInput = igText || '';
+    toolUrlInput  = research?.tool_url || '';
+
+    // Supabase cache 저장
+    const score = scoreContent(igText, keywords);
+    await saveToSupabaseCache(toolNameInput, igText, score).catch(() => {});
+    console.log(`✅ 툴 선정 완료: ${toolNameInput} (품질점수: ${score})`);
+    await tg(`🚀 NOVA 콘텐츠 생성 완료\n📌 ${keywords.split('|||')[0]} — ${keywords.split('|||')[1] || ''}\n🎬 영상 생성 중...`);
+  }
+
+  // ── 기존 변수 (env 값 또는 AI 파이프라인 결과) ─────────────────
+  const scriptText  = scriptTextRaw.slice(0, 2500);
+  const title       = titleInput || 'NOVA AI';
+  const tags        = (SCRIPT_TAGS || '').split(',').map(t => t.trim()).filter(Boolean);
+  const toolName    = toolNameInput || title.replace('오늘의 AI 툴: ', '').trim();
+  const compareWith = compareInput || '';
+  const combo       = comboInput || '';
+  const toolUrl     = toolUrlInput || '';
   const shortsTitle = `${title} #Shorts`.slice(0, 100);
 
   // ── 1. TTS (edge-tts) ─────────────────────────────────────────
