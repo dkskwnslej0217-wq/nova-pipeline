@@ -686,7 +686,7 @@ async function fetchResearchResult() {
   for (const d of [kst.toISOString().slice(0, 10), new Date(kst - 86400000).toISOString().slice(0, 10)]) {
     try {
       const res = await ft(
-        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}&select=tool_name,one_liner,target,price,compare_tool,reason_kr,tool_url&limit=1`,
+        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}&select=tool_name,one_liner,target,price,compare_tool,reason_kr,tool_url,features_kr,scenario_kr,hook_kr&limit=1`,
         { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }, 8000
       );
       if (!res.ok) continue;
@@ -795,11 +795,20 @@ async function finalizeContent(keywords) {
   const toolTarget  = parts[2]?.trim() || '';
   const toolPrice   = parts[3]?.trim() || '';
   const compareWith = parts[4]?.trim() || 'ChatGPT';
+  const features    = parts[5]?.trim() || '';
+  const scenario    = parts[6]?.trim() || '';
+  const hookSeed    = parts[7]?.trim() || '';
   const ctx = getContentContext();
+
+  const researchCtx = [
+    features  ? `핵심기능: ${features}` : '',
+    scenario  ? `시나리오: ${scenario}` : '',
+    hookSeed  ? `훅 힌트: ${hookSeed}` : '',
+  ].filter(Boolean).join('\n');
 
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
   const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}
-오늘 카테고리: ${ctx.dayCategory}
+오늘 카테고리: ${ctx.dayCategory}${researchCtx ? `\n리서치 데이터:\n${researchCtx}` : ''}
 금지어: "안녕하세요" "여러분" "오늘은" "확실히" "물론" "정말"
 
 아래 구분자 그대로 작성:
@@ -816,7 +825,7 @@ async function finalizeContent(keywords) {
 
 ===YT===
 (나레이션 60초. 말하듯 자연스럽게. 350~450자.
-1. 후킹 — ${compareWith} 쓸 때 겪는 불편함
+1. 후킹 — ${hookSeed || `${compareWith} 쓸 때 겪는 불편함`}
 2. 소개 — ${toolName}이 뭘 하는지
 3. 장점 — ${compareWith}보다 나은 점
 4. 단점 — 솔직하게 1가지
@@ -921,7 +930,7 @@ async function run() {
     // 툴 선정
     let keywords;
     if (research?.tool_name) {
-      keywords = `${research.tool_name}|||${research.one_liner||''}|||${research.target||''}|||${research.price||''}|||${research.compare_tool||'ChatGPT'}`;
+      keywords = `${research.tool_name}|||${research.one_liner||''}|||${research.target||''}|||${research.price||''}|||${research.compare_tool||'ChatGPT'}|||${research.features_kr||''}|||${research.scenario_kr||''}|||${research.hook_kr||''}`;
       console.log(`✅ research-agent 사용: ${research.tool_name}`);
     } else {
       try {
