@@ -35,11 +35,3 @@ jobs:
           TELEGRAM_CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node agent/run-agents.js
 
-      - name: Run Kmong agent
-        env:
-          ANTHROPIC_API_KEY:      ${{ secrets.ANTHROPIC_API_KEY }}
-          TELEGRAM_BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
-          KMONG_EMAIL:            ${{ secrets.KMONG_EMAIL }}
-          KMONG_PASSWORD:         ${{ secrets.KMONG_PASSWORD }}
-        run: node agent/kmong-agent.js
