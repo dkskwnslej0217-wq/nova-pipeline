@@ -8,20 +8,47 @@
 - 설명 없이 바로 코드 작성 금지 → junho 확인 후 시작
 
 ## 스택
-- Vercel Node.js / Supabase / Make.com / Groq (무료) / Gemini Flash (폴백)
-- 배포: nova-pipeline-two.vercel.app (git push → 자동 빌드)
+- GitHub Actions / Supabase / Anthropic API (Claude Agent SDK) / Groq / Gemini Flash
 - GitHub: dkskwnslej0217-wq/nova-pipeline
-- Make.com: 매일 08:00 + 12:00 KST → /api/run-pipeline
 
 ## 파이프라인 구조
+
+### 전체 자동화 흐름 (GitHub Actions만 사용, Make.com 없음)
 ```
-Make.com 트리거
-  → /api/run-pipeline  (메인: 트렌드 수집 → 콘텐츠 생성 → 발행)
-  → /api/run-client    (클라이언트별 실행)
-  → /api/clients       (CRUD)
-  → /api/weekly-report (매주 월요일)
-  → /api/post-instagram / post-facebook (발행)
+22:00 UTC / 07:00 KST  crawlee-agent (별도 레포)
+  └─ PH(RSS) / Reddit(RSS) / HN(API) 수집 → Supabase trend_sources
+
+22:30 UTC / 07:30 KST  research-agent (별도 레포)
+  └─ TOP1 선정 + 분석 → Supabase research_results
+
+23:00 UTC / 08:00 KST  nova-pipeline agent-pipeline.yml
+  └─ agent/run-agents.js → 클라이언트별 병렬 에이전트 (Claude Agent SDK)
+  └─ agent/kmong-agent.js → 크몽 자동화
+  └─ GitHub API repository_dispatch → create-video 트리거
+
+     create-video.yml (repository_dispatch 수신)
+  └─ scripts/generate_video.js
+  └─ FFmpeg + edge-tts + Remotion → 영상 생성
+  └─ Instagram / Facebook / YouTube 발행
+  └─ Telegram 완료 알림
 ```
+
+### GitHub Actions 워크플로우 4개
+| 파일 | 트리거 | 용도 |
+|------|--------|------|
+| agent-pipeline.yml | 매일 23:00 UTC (08:00 KST) | 메인 에이전트 실행 |
+| create-video.yml | repository_dispatch / schedule | 영상 생성 + 발행 |
+| retry-youtube.yml | schedule | YouTube 업로드 재시도 |
+| yt-token-check.yml | schedule | YouTube 토큰 만료 체크 |
+
+### Vercel 프로젝트
+- `nova-pipeline-two` — 실제 운영 중 (nova-pipeline-two.vercel.app)
+- `nova-pipeline` — 구버전
+
+### crawlee-agent 연결 방식
+- **직접 trigger 없음** — Supabase trend_sources 테이블 공유
+- crawlee-agent가 저장 → nova-pipeline이 1시간 뒤 읽기
+- create-video는 agent/run-agents.js가 GitHub API로 repository_dispatch 트리거
 
 ## Groq 사용 규칙
 - max_tokens: 600 이하
