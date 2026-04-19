@@ -86,3 +86,15 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node scripts/generate_video.js
+
+      - name: 실패 시 debug-agent 트리거
+        if: failure()
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token $GH_PAT" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/dkskwnslej0217-wq/debug-agent/dispatches \
+            -d "{\"event_type\":\"pipeline-failure\",\"client_payload\":{\"repo\":\"nova-pipeline\",\"run_id\":\"${{ github.run_id }}\",\"workflow\":\"Create Video\"}}"
