@@ -193,8 +193,8 @@ function HookSlide({ toolName, hookText }) {
 
 // ── 퀵카드 ───────────────────────────────────────────────────────
 const CARD_COLORS  = [C.cyan, C.purple, C.green, C.blue];
-const CARD_ICONS   = ['⚡', '🎯', '✅', '🚀'];
-const CARD_LABELS  = ['핵심 기능', '이런 분께', '장점', '시작 방법'];
+const CARD_ICONS   = ['⚡', '💡', '✅', '🚀'];
+const CARD_LABELS  = ['핵심 기능', '실제 사용 예시', '장점', '시작 방법'];
 
 function QuickCardSlide({ text, idx }) {
   const color  = CARD_COLORS[idx % 4];
@@ -334,8 +334,11 @@ function CTASlide({ toolName }) {
 }
 
 // ── 메인 컴포지션 ────────────────────────────────────────────────
-export function NovaVideo({ toolName, hookText, bullets }) {
+export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr }) {
   const cards = (bullets || []).slice(0, 4);
+  // research-agent 데이터 우선 반영
+  if (featuresKr) cards[0] = featuresKr.replace(/\//g, '  /  ');
+  if (scenarioKr) cards[1] = scenarioKr;
   // 부족하면 기본값 채우기
   while (cards.length < 4) {
     cards.push(['핵심 작업에 특화된 AI', '무료로 바로 시작 가능', '결과물 즉시 활용', '링크는 바이오 참고'][cards.length]);

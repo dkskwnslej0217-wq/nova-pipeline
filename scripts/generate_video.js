@@ -155,11 +155,11 @@ async function renderWithRemotion(props, outputPath) {
 }
 
 // ── 슬라이드 영상 생성 (Remotion) ────────────────────────────────
-async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl) {
+async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, featuresKr = '', scenarioKr = '') {
   const { hookText, bullets } = parseContent(scriptText, toolName, compareWith);
 
   // Remotion 렌더 (고정 420프레임 = 14초)
-  await renderWithRemotion({ toolName, hookText, bullets }, 'output_silent.mp4');
+  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr }, 'output_silent.mp4');
 
   // 오디오가 있으면 합성, 없으면 그대로 사용
   if (fs.existsSync('audio.mp3')) {
@@ -1032,7 +1032,7 @@ asyncio.run(main())
   }
 
   // ── 3. 슬라이드 영상 생성 ─────────────────────────────────────
-  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl);
+  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, research?.features_kr || '', research?.scenario_kr || '');
 
   // ── 4. Supabase Storage 업로드 (영상) ───────────────────────────
   console.log('\n☁️  Supabase 영상 업로드 중...');
