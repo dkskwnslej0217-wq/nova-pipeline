@@ -27,6 +27,10 @@ on:
         description: 'IG 슬라이드 내용 ([S1]~[S7] 형식)'
         required: false
         default: '[S1] Perplexity AI — 출처 포함 AI 검색 도구\n[S2] ChatGPT 쓸 때 이런 불편 없으세요?\n• 답변 출처가 없어서 사실인지 불안\n• 최신 정보를 모르는 경우가 많음\n• 검색창 따로 열어야 해서 번거로움\n[S3] 실제 사용 예시\n입력: "GPT-5 출시 언제야?"\n    ↓ 5초 후\n출력: 출처 3개 포함한 최신 답변\n[S4] 사용법 3단계\n① perplexity.ai 접속 후 무료 가입\n② 궁금한 것 그냥 질문\n③ 출처 클릭해서 원문 바로 확인\n[S5] ChatGPT vs Perplexity AI\n속도: 비슷 vs 약간 빠름\n가격: 무료 있음 vs 무료 있음\n정확도: 훈련 데이터 기준 vs 실시간 웹\n추천 상황: 글쓰기·창작 vs 리서치·사실확인\n[S6] ✅ 추천: 리서치, 공부, 사실 확인하는 분\n❌ 비추천: 창작 글쓰기, 코딩 위주인 분\n[S7] 지금 무료로 시작 가능 → 링크는 바이오 참고 🔗'
+      dry_run:
+        description: '발행 스킵 (테스트용)'
+        required: false
+        default: 'false'
 
 jobs:
   build:
@@ -85,6 +89,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: node scripts/generate_video.js
 
       - name: 실패 시 debug-agent 트리거

@@ -19,6 +19,8 @@ const {
   GEMINI_API_KEY, GROQ_API_KEY, ANTHROPIC_API_KEY,
 } = process.env;
 
+const DRY_RUN = process.env.DRY_RUN === 'true';
+
 // ── Chromium 경로 탐색 ────────────────────────────────────────────
 function findChromium() {
   const candidates = [
@@ -909,6 +911,7 @@ async function run() {
   let compareInput  = SCRIPT_COMPARE || '';
   let comboInput    = SCRIPT_COMBO || '';
   let toolUrlInput  = SCRIPT_TOOL_URL || '';
+  let research      = null;
 
   if (!scriptTextRaw) {
     console.log('\n🤖 AI 파이프라인 시작 (트렌드 수집 → 툴 선정 → 콘텐츠 생성)');
@@ -1046,6 +1049,13 @@ asyncio.run(main())
   // 인스타 릴스 캡션
   const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')} #Shorts`;
   const igCaption = `${title}\n\n${scriptText.slice(0, 300)}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
+
+  // DRY_RUN 모드 — 발행 없이 종료
+  if (DRY_RUN) {
+    console.log('\n🧪 DRY_RUN 모드 — 발행 스킵. 영상 생성까지만 완료.');
+    await tg('🧪 DRY_RUN 완료 — 발행 없음. 영상 생성 성공.');
+    return;
+  }
 
   // 사람처럼 보이도록 발행 전 랜덤 딜레이 (30~90초)
   const humanDelay = Math.floor(Math.random() * 60000) + 30000;
