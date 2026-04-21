@@ -983,59 +983,11 @@ async function run() {
   const toolUrl     = toolUrlInput || '';
   const shortsTitle = `${title} #Shorts`.slice(0, 100);
 
-  // ── 1. TTS (edge-tts) ─────────────────────────────────────────
-  console.log('\n🎙️ TTS 생성 중 (edge-tts)...');
-  fs.writeFileSync('tts_script.txt', scriptText);
-  fs.writeFileSync('run_tts.py', `
-import asyncio, edge_tts
+  // ── 1. TTS 비활성화 — 무음 영상으로 발행
+  const audioDuration = 14;
 
-def to_srt_time(ns100):
-    ms = ns100 // 10000
-    h, ms = divmod(ms, 3600000)
-    m, ms = divmod(ms, 60000)
-    s, ms = divmod(ms, 1000)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-async def main():
-    with open('tts_script.txt', encoding='utf-8') as f:
-        text = f.read()
-    comm = edge_tts.Communicate(text, "ko-KR-HyunsuNeural", rate="+10%", volume="+10%")
-    words = []
-    with open('audio.mp3', 'wb') as af:
-        async for chunk in comm.stream():
-            if chunk['type'] == 'audio':
-                af.write(chunk['data'])
-            elif chunk['type'] == 'WordBoundary':
-                words.append((chunk['offset'], chunk['duration'], chunk['text']))
-    cue_size = 4
-    lines = []
-    for i in range(0, len(words), cue_size):
-        group = words[i:i+cue_size]
-        start = to_srt_time(group[0][0])
-        end   = to_srt_time(group[-1][0] + group[-1][1])
-        txt   = ' '.join(w[2] for w in group)
-        lines.append(f"{i//cue_size+1}\\n{start} --> {end}\\n{txt}\\n")
-    with open('subtitles.srt', 'w', encoding='utf-8') as sf:
-        sf.write('\\n'.join(lines))
-    print(f"✅ 자막 {len(lines)}개 생성")
-
-asyncio.run(main())
-`);
-  execSync('python3 run_tts.py', { stdio: 'inherit' });
-  console.log('✅ audio.mp3 + subtitles.srt 저장');
-
-  const audioDuration = getAudioDuration('audio.mp3');
-  console.log(`⏱️  오디오 ${audioDuration.toFixed(1)}초`);
-
-  // ── 2. SRT 자막 확인 ─────────────────────────────────────────
-  const srtPath = path.resolve('subtitles.srt');
-  if (!fs.existsSync(srtPath) || fs.statSync(srtPath).size < 10) {
-    fs.writeFileSync(srtPath, generateSRT(scriptText));
-    console.log('⚠️ subtitles.srt fallback');
-  }
-
-  // ── 3. 슬라이드 영상 생성 ─────────────────────────────────────
-  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, research?.features_kr || '', research?.scenario_kr || '');
+  // ── 2. 슬라이드 영상 생성 ─────────────────────────────────────
+  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '');
 
   // ── 4. Supabase Storage 업로드 (영상) ───────────────────────────
   console.log('\n☁️  Supabase 영상 업로드 중...');
@@ -1172,7 +1124,7 @@ asyncio.run(main())
   console.log('⏭️ Facebook 발행 비활성화 — 차단 해제 대기 중');
 
   // ── 6. 임시 파일 정리 ─────────────────────────────────────────
-  ['audio.mp3', 'tts_script.txt', 'run_tts.py', 'subtitles.srt', 'output.mp4'].forEach(f => {
+  ['output.mp4'].forEach(f => {
     try { fs.unlinkSync(f); } catch {}
   });
 
