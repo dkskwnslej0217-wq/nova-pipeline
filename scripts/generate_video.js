@@ -1117,6 +1117,54 @@ async function run() {
     }
   }
 
+  // ── YouTube ───────────────────────────────────────────────
+  let ytStatus;
+  const ytLog = await getPublishLog(today, 'youtube');
+  if (ytLog?.status === 'success') {
+    ytStatus = '✅ (이미 발행됨, 스킵)';
+    console.log('⏭️ YouTube 이미 발행됨 — 스킵');
+  } else {
+    const ytRetryCount = (ytLog?.retry_count || 0);
+    const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI'];
+    const ytDesc = `${scriptText.slice(0, 400)}\n\n🔗 ${toolUrl}\n\n#Shorts #AI툴 #오늘의AI`;
+    try {
+      const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
+      auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
+      const youtube = google.youtube({ version: 'v3', auth });
+      const res = await youtube.videos.insert({
+        part: ['snippet', 'status'],
+        requestBody: {
+          snippet: {
+            title: shortsTitle,
+            description: ytDesc,
+            tags: allTags,
+            categoryId: '28',
+            defaultLanguage: 'ko',
+          },
+          status: { privacyStatus: 'public' },
+        },
+        media: { body: fs.createReadStream('output.mp4') },
+      });
+      const ytUrl = `https://youtu.be/${res.data.id}`;
+      console.log(`✅ YouTube Shorts 업로드: ${ytUrl}`);
+      ytStatus = `✅ ${ytUrl}`;
+      await upsertPublishLog(today, 'youtube', 'success', {
+        postId: res.data.id,
+        content: { videoUrl, title: shortsTitle, description: ytDesc, tags: allTags },
+        retryCount: ytRetryCount,
+      });
+      await tg(`▶️ YouTube 업로드 완료\n${ytUrl}`);
+    } catch (e) {
+      ytStatus = `❌ ${e.message?.slice(0, 60)}`;
+      await upsertPublishLog(today, 'youtube', 'failed', {
+        errorMsg: e.message?.slice(0, 200),
+        content: { videoUrl, title: shortsTitle, description: ytDesc, tags: allTags },
+        retryCount: ytRetryCount,
+      });
+      await tg(`⚠️ YouTube 실패\n${ytStatus}`);
+    }
+  }
+
   // ── Facebook ──────────────────────────────────────────────
   // 🔴 차단 해제 대기 중 — 비활성화
   // 재활성화 조건: Facebook Business Suite에서 제한 해제 확인 후 junho가 직접 주석 제거
