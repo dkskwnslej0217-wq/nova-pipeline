@@ -1,8 +1,8 @@
 name: Create Video
 
 on:
-  schedule:
-    - cron: '0 23 * * *'  # 매일 08:00 KST (23:00 UTC)
+  # schedule:
+  #   - cron: '0 23 * * *'  # 매일 08:00 KST (23:00 UTC) — 업그레이드 중 일시 정지
   repository_dispatch:
     types: [create-video]
   workflow_dispatch:
