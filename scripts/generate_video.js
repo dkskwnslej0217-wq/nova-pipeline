@@ -930,7 +930,25 @@ async function run() {
 
     console.log(`  HN:${hn?.length||0} Reddit:${reddit?.length||0} PH:${ph?.length||0} crawlee:${crawlee?.length||0} research:${!!research?.tool_name}`);
 
-    // 툴 선정
+    // ── 주식 뉴스 모드 분기 ─────────────────────────────────
+    if (research?.price === 'stock_news') {
+      console.log(`📈 주식 뉴스 모드: ${research.tool_name?.slice(0, 60)}`);
+      toolNameInput = research.hook_kr || '미국주식 뉴스';
+      titleInput    = `📈 미국주식 | ${research.hook_kr || '오늘의 뉴스'}`;
+      scriptTextRaw = research.scenario_kr || research.one_liner || '';
+      toolUrlInput  = research.tool_url || '';
+      compareInput  = '';
+      comboInput    = '';
+      igSlidesInput = [
+        `[S1] ${research.hook_kr}`,
+        `[S2] ${research.one_liner}`,
+        `[S3] ${research.features_kr}`,
+        `[S4] ${research.reason_kr}`,
+        `[S5] 매일 미국주식 뉴스 요약 → 팔로우 👆`,
+      ].join('\n');
+      await tg(`📈 NOVA 주식뉴스 모드\n🎬 ${research.hook_kr}\n📝 ${research.one_liner}`);
+    } else {
+    // ── AI 툴 모드 ───────────────────────────────────────────
     let keywords;
     if (research?.tool_name) {
       keywords = `${research.tool_name}|||${research.one_liner||''}|||${research.target||''}|||${research.price||''}|||${research.compare_tool||'ChatGPT'}|||${research.features_kr||''}|||${research.scenario_kr||''}|||${research.hook_kr||''}`;
@@ -971,6 +989,7 @@ async function run() {
     await saveToSupabaseCache(toolNameInput, igText, score).catch(() => {});
     console.log(`✅ 툴 선정 완료: ${toolNameInput} (품질점수: ${score})`);
     await tg(`🚀 NOVA 콘텐츠 생성 완료\n📌 ${keywords.split('|||')[0]} — ${keywords.split('|||')[1] || ''}\n🎬 영상 생성 중...`);
+    } // end AI 툴 모드
   }
 
   // ── 기존 변수 (env 값 또는 AI 파이프라인 결과) ─────────────────
@@ -999,7 +1018,10 @@ async function run() {
   const today = kstDate();
 
   // 인스타 릴스 캡션
-  const igHashtags = `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')} #Shorts`;
+  const isStockNews = (SCRIPT_TAGS || '').includes('stock_news') || title.includes('📈');
+  const igHashtags = isStockNews
+    ? `#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식 #Shorts`
+    : `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')} #Shorts`;
   const igCaption = `${title}\n\n${scriptText.slice(0, 300)}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
 
   // DRY_RUN 모드 — 발행 없이 종료
