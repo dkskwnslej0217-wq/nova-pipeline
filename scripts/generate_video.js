@@ -688,7 +688,7 @@ async function fetchResearchResult() {
   for (const d of [kst.toISOString().slice(0, 10), new Date(kst - 86400000).toISOString().slice(0, 10)]) {
     try {
       const res = await ft(
-        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}&select=tool_name,one_liner,target,price,compare_tool,reason_kr,tool_url,features_kr,scenario_kr,hook_kr&limit=1`,
+        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}&select=tool_name,one_liner,target,price,compare_tool,reason_kr,tool_url,features_kr,scenario_kr,hook_kr,tool_desc&order=id.desc&limit=1`,
         { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }, 8000
       );
       if (!res.ok) continue;
