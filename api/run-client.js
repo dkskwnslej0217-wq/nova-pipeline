@@ -51,6 +51,23 @@ async function updateClientStats(clientId) {
   }).catch(() => {});
 }
 
+// ─── 오늘의 주식 리서치 결과 로드 ────────────────────────
+async function fetchStockResearch() {
+  const kst = new Date(Date.now() + 9 * 3600000);
+  for (const d of [kst.toISOString().slice(0, 10), new Date(kst - 86400000).toISOString().slice(0, 10)]) {
+    try {
+      const res = await fetch(
+        `${SUPA_URL}/rest/v1/research_results?date=eq.${d}&type=eq.us_stock&select=tool_name,hook_kr,one_liner,features_kr,reason_kr,tool_url&limit=1`,
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+      );
+      if (!res.ok) continue;
+      const rows = await res.json();
+      if (rows.length) return rows[0];
+    } catch { continue; }
+  }
+  return null;
+}
+
 // ─── 트렌드 수집 (공유 소스 — API키 불필요) ───────────────
 async function collectTrends() {
   const [hn, google, ph] = await Promise.all([
@@ -81,6 +98,21 @@ function filterKorean(text) {
     .replace(/[\u4E00-\u9FFF\u3400-\u4DBF]/g, '')
     .replace(/[\u0600-\u06FF]/g, '')
     .replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function buildStockContent(stock) {
+  const igText = [
+    `⚡ ${stock.hook_kr || '오늘 미국주식 주목'}`,
+    ``,
+    `→ ${stock.one_liner || ''}`,
+    `→ ${stock.features_kr || ''}`,
+    `→ ${stock.reason_kr || ''}`,
+    ``,
+    `💾 매일 미국주식 뉴스 팔로우 필수`,
+  ].join('\n');
+  const fbText = `${stock.hook_kr || ''}\n\n${stock.one_liner || ''}\n${stock.features_kr || ''}\n\n📈 미국주식 투자자라면 팔로우하고 매일 확인하세요`;
+  const ytText = stock.one_liner || '';
+  return { igText, fbText, ytText };
 }
 
 async function generateContent(niche, target, trends) {
@@ -158,11 +190,16 @@ export default async function handler(req, res) {
   let igStatus = '❌', fbStatus = '❌';
 
   try {
-    // 트렌드 수집
-    const trends = await collectTrends();
+    // 주식 리서치 결과 우선 로드 (Instagram용)
+    const stockResearch = await fetchStockResearch();
 
-    // 콘텐츠 생성
-    const { igText, fbText } = await generateContent(niche, target, trends);
+    // 트렌드 수집 (주식 데이터 없을 때만 Groq 생성용)
+    const trends = stockResearch ? { hn: [], google: [], ph: [] } : await collectTrends();
+
+    // 콘텐츠 생성 (주식 데이터 있으면 우선 사용)
+    const { igText, fbText } = stockResearch
+      ? buildStockContent(stockResearch)
+      : await generateContent(niche, target, trends);
     const imagePrompt = buildImagePrompt(niche);
 
     const fixedTags = '#AI부업 #직장인부업 #자동화 #월급외수익 #AI자동화';

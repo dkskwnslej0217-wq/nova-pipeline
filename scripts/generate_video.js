@@ -683,18 +683,19 @@ async function fetchTrendSources() {
   return [];
 }
 
-async function fetchResearchResult() {
+async function fetchResearchResult(type = '') {
   const kst = new Date(Date.now() + 9 * 3600000);
+  const typeFilter = type ? `&type=eq.${type}` : '';
   for (const d of [kst.toISOString().slice(0, 10), new Date(kst - 86400000).toISOString().slice(0, 10)]) {
     try {
       const res = await ft(
-        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}&select=tool_name,one_liner,target,price,compare_tool,reason_kr,tool_url,features_kr,scenario_kr,hook_kr&limit=1`,
+        `${SUPABASE_URL}/rest/v1/research_results?date=eq.${d}${typeFilter}&select=tool_name,one_liner,target,price,type,compare_tool,reason_kr,tool_url,features_kr,scenario_kr,hook_kr&limit=1`,
         { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }, 8000
       );
-      if (!res.ok) { console.warn(`⚠️ research_results 조회 실패 (${d}): HTTP ${res.status} — ${await res.text().catch(()=>'')}`); continue; }
+      if (!res.ok) { console.warn(`⚠️ research_results 조회 실패 (${d}/${type}): HTTP ${res.status}`); continue; }
       const rows = await res.json();
       if (rows.length) return rows[0];
-    } catch (e) { console.warn(`⚠️ research_results 예외 (${d}): ${e.message}`); continue; }
+    } catch (e) { console.warn(`⚠️ research_results 예외 (${d}/${type}): ${e.message}`); continue; }
   }
   return null;
 }
@@ -918,41 +919,39 @@ async function run() {
     await tg('🔄 NOVA 파이프라인 시작');
 
     // 트렌드 병렬 수집
-    const [hn, reddit, ph, googleTr, crawlee, research, memory] = await Promise.allSettled([
+    const [hn, reddit, ph, googleTr, crawlee, aiResearch, stockResearch, memory] = await Promise.allSettled([
       fetchHNTrends(),
       fetchRedditTrends(),
       fetchProductHuntAI(),
       fetchGoogleTrendsKR(),
       fetchTrendSources(),
-      fetchResearchResult(),
+      fetchResearchResult('ai_tool'),   // YouTube용
+      fetchResearchResult('us_stock'),  // Instagram용
       fetchRecentTopics(),
     ]).then(r => r.map(x => x.status === 'fulfilled' ? x.value : (x.value?.recent !== undefined ? { recent: [], topScored: [] } : [])));
 
-    console.log(`  HN:${hn?.length||0} Reddit:${reddit?.length||0} PH:${ph?.length||0} crawlee:${crawlee?.length||0} research:${!!research?.tool_name}`);
+    console.log(`  HN:${hn?.length||0} Reddit:${reddit?.length||0} PH:${ph?.length||0} aiTool:${!!aiResearch?.tool_name} usStock:${!!stockResearch?.tool_name}`);
 
-    // ── 주식 뉴스 모드 분기 ─────────────────────────────────
-    if (research?.price === 'stock_news') {
-      console.log(`📈 주식 뉴스 모드: ${research.tool_name?.slice(0, 60)}`);
-      toolNameInput = research.hook_kr || '미국주식 뉴스';
-      titleInput    = `📈 미국주식 | ${research.hook_kr || '오늘의 뉴스'}`;
-      scriptTextRaw = research.scenario_kr || research.one_liner || '';
-      toolUrlInput  = research.tool_url || '';
-      compareInput  = '';
-      comboInput    = '';
+    // ── Instagram 슬라이드: 항상 주식 데이터 사용 ────────────
+    if (stockResearch?.tool_name) {
       igSlidesInput = [
-        `[S1] ${research.hook_kr}`,
-        `[S2] ${research.one_liner}`,
-        `[S3] ${research.features_kr}`,
-        `[S4] ${research.reason_kr}`,
+        `[S1] ${stockResearch.hook_kr}`,
+        `[S2] ${stockResearch.one_liner}`,
+        `[S3] ${stockResearch.features_kr}`,
+        `[S4] ${stockResearch.reason_kr}`,
         `[S5] 매일 미국주식 뉴스 요약 → 팔로우 👆`,
       ].join('\n');
-      await tg(`📈 NOVA 주식뉴스 모드\n🎬 ${research.hook_kr}\n📝 ${research.one_liner}`);
-    } else {
-    // ── AI 툴 모드 ───────────────────────────────────────────
+      console.log(`📈 Instagram 주식 슬라이드: ${stockResearch.hook_kr}`);
+      await tg(`📈 NOVA Instagram — 미국주식\n🎬 ${stockResearch.hook_kr}\n📝 ${stockResearch.one_liner}`);
+    }
+
+    // ── YouTube: 항상 AI 툴 데이터 사용 ─────────────────────
+    {
+    const research = aiResearch;
     let keywords;
     if (research?.tool_name) {
       keywords = `${research.tool_name}|||${research.one_liner||''}|||${research.target||''}|||${research.price||''}|||${research.compare_tool||'ChatGPT'}|||${research.features_kr||''}|||${research.scenario_kr||''}|||${research.hook_kr||''}`;
-      console.log(`✅ research-agent 사용: ${research.tool_name}`);
+      console.log(`✅ AI툴 (YouTube): ${research.tool_name}`);
     } else {
       try {
         keywords = await extractKeywords(hn||[], [], reddit||[], ph||[], crawlee||[], memory?.recent||[], memory?.topScored||[]);
@@ -988,8 +987,8 @@ async function run() {
     const score = scoreContent(igText, keywords);
     await saveToSupabaseCache(toolNameInput, igText, score).catch(() => {});
     console.log(`✅ 툴 선정 완료: ${toolNameInput} (품질점수: ${score})`);
-    await tg(`🚀 NOVA 콘텐츠 생성 완료\n📌 ${keywords.split('|||')[0]} — ${keywords.split('|||')[1] || ''}\n🎬 영상 생성 중...`);
-    } // end AI 툴 모드
+    await tg(`🚀 NOVA YouTube 콘텐츠 생성 완료\n📌 ${keywords.split('|||')[0]} — ${keywords.split('|||')[1] || ''}\n🎬 영상 생성 중...`);
+    } // end YouTube AI 툴 블록
   }
 
   // ── 기존 변수 (env 값 또는 AI 파이프라인 결과) ─────────────────
@@ -1018,10 +1017,8 @@ async function run() {
   const today = kstDate();
 
   // 인스타 릴스 캡션
-  const isStockNews = (SCRIPT_TAGS || '').includes('stock_news') || title.includes('📈');
-  const igHashtags = isStockNews
-    ? `#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식 #Shorts`
-    : `#AI툴 #인공지능 #오늘의AI #새로운AI #AI추천 #${toolName.replace(/\s/g, '')} #Shorts`;
+  // Instagram은 항상 주식 해시태그
+  const igHashtags = `#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식 #Shorts`;
   const igCaption = `${title}\n\n${scriptText.slice(0, 300)}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
 
   // DRY_RUN 모드 — 발행 없이 종료
