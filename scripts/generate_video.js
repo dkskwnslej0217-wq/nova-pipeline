@@ -1127,6 +1127,7 @@ async function run() {
       await tg(`▶️ YouTube 업로드 완료\n${ytUrl}`);
     } catch (e) {
       ytStatus = `❌ ${e.message?.slice(0, 60)}`;
+      console.error(`❌ YouTube 업로드 실패: ${e.message}`);
       await upsertPublishLog(today, 'youtube', 'failed', {
         errorMsg: e.message?.slice(0, 200),
         content: { videoUrl, title: shortsTitle, description: ytDesc, tags: allTags },
