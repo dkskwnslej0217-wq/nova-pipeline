@@ -20,6 +20,40 @@ const {
 } = process.env;
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
+const PEXELS_KEY = process.env.PEXELS_API_KEY;
+
+// ── Pexels 이미지 ─────────────────────────────────────────────────
+async function fetchPexelsImage(keyword, orientation = 'portrait') {
+  if (!PEXELS_KEY) return null;
+  try {
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(keyword)}&per_page=10&orientation=${orientation}`,
+      { headers: { Authorization: PEXELS_KEY } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const photos = data.photos || [];
+    if (!photos.length) return null;
+    const photo = photos[Math.floor(Math.random() * Math.min(photos.length, 5))];
+    return orientation === 'portrait' ? (photo.src.portrait || photo.src.large) : photo.src.large;
+  } catch (e) {
+    console.warn(`⚠️ Pexels 실패 (${keyword}): ${e.message}`);
+    return null;
+  }
+}
+
+async function imageUrlToBase64(url) {
+  if (!url) return '';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return '';
+    const buf = Buffer.from(await res.arrayBuffer());
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  } catch (e) {
+    console.warn(`⚠️ 이미지 다운로드 실패: ${e.message}`);
+    return '';
+  }
+}
 
 // ── Chromium 경로 탐색 ────────────────────────────────────────────
 function findChromium() {
@@ -157,11 +191,11 @@ async function renderWithRemotion(props, outputPath) {
 }
 
 // ── 슬라이드 영상 생성 (Remotion) ────────────────────────────────
-async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, featuresKr = '', scenarioKr = '') {
+async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, featuresKr = '', scenarioKr = '', bgImage = '') {
   const { hookText, bullets } = parseContent(scriptText, toolName, compareWith);
 
   // Remotion 렌더 (고정 420프레임 = 14초)
-  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr }, 'output_silent.mp4');
+  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage }, 'output_silent.mp4');
 
   // 오디오가 있으면 합성, 없으면 그대로 사용
   if (fs.existsSync('audio.mp3')) {
@@ -240,7 +274,7 @@ function parseIGSlides(raw, toolName) {
   return result;
 }
 
-function makeSlideHTML(slideNum, total, text, toolName, type) {
+function makeSlideHTML(slideNum, total, text, toolName, type, bgBase64 = '') {
   const cfg = {
     title:   { accent: '#20B8CD', bg2: '#1a2a3a', icon: '🤖', label: '오늘의 AI 툴' },
     problem: { accent: '#f97316', bg2: '#2a1a0d', icon: '💡', label: '이런 문제 있으세요?' },
@@ -283,7 +317,7 @@ function makeSlideHTML(slideNum, total, text, toolName, type) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{width:1080px;height:1080px;
-  background:linear-gradient(145deg,#0d1117 0%,${bg2} 55%,#0d1117 100%);
+  background:${bgBase64 ? `url('${bgBase64}') center/cover no-repeat` : `linear-gradient(145deg,#0d1117 0%,${bg2} 55%,#0d1117 100%)`};
   font-family:'Noto Sans KR','NanumGothic',sans-serif;
   display:flex;flex-direction:column;justify-content:center;
   align-items:flex-start;padding:88px 96px 80px;position:relative;overflow:hidden}
@@ -343,6 +377,7 @@ body{width:1080px;height:1080px;
 .dot.on{width:28px;border-radius:6px;background:${accent};
   box-shadow:0 0 8px ${accent}88}
 </style></head><body>
+${bgBase64 ? `<div style="position:absolute;inset:0;background:rgba(13,17,23,0.75)"></div>` : ''}
 <div class="glow-tl"></div>
 <div class="glow-br"></div>
 <div class="grid"></div>
@@ -359,7 +394,7 @@ ${bodyContent}
 </body></html>`;
 }
 
-async function generateCarouselImages(slides, toolName) {
+async function generateCarouselImages(slides, toolName, bgBase64 = '') {
   const types = ['title', 'problem', 'feature', 'pros', 'cons', 'target', 'cta'];
   const keys  = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
 
@@ -380,7 +415,7 @@ async function generateCarouselImages(slides, toolName) {
   const paths = [];
 
   for (let i = 0; i < 7; i++) {
-    const html   = makeSlideHTML(i + 1, 7, slides[keys[i]] || '', toolName, types[i]);
+    const html   = makeSlideHTML(i + 1, 7, slides[keys[i]] || '', toolName, types[i], bgBase64);
     const imgOut = `/tmp/ig_carousel_${i}.png`;
 
     const page = await browser.newPage();
@@ -991,6 +1026,23 @@ async function run() {
     } // end YouTube AI 툴 블록
   }
 
+  // ── Pexels 배경 이미지 ─────────────────────────────────────────
+  let ytBgImage = '', igBgImage = '';
+  try {
+    const ytKeyword = toolNameInput ? `${toolNameInput} technology artificial intelligence` : 'artificial intelligence technology laptop';
+    const [ytUrl, igUrl] = await Promise.all([
+      fetchPexelsImage(ytKeyword, 'portrait'),
+      fetchPexelsImage('stock market finance trading chart', 'landscape'),
+    ]);
+    [ytBgImage, igBgImage] = await Promise.all([
+      imageUrlToBase64(ytUrl),
+      imageUrlToBase64(igUrl),
+    ]);
+    console.log(`🖼️ Pexels: YT=${!!ytBgImage} IG=${!!igBgImage}`);
+  } catch (e) {
+    console.warn(`⚠️ Pexels 실패: ${e.message}`);
+  }
+
   // ── 기존 변수 (env 값 또는 AI 파이프라인 결과) ─────────────────
   const scriptText  = scriptTextRaw.slice(0, 2500);
   const title       = titleInput || 'NOVA AI';
@@ -1005,7 +1057,7 @@ async function run() {
   const audioDuration = 14;
 
   // ── 2. 슬라이드 영상 생성 ─────────────────────────────────────
-  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '');
+  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '', ytBgImage);
 
   // ── 4. Supabase Storage 업로드 (영상) ───────────────────────────
   console.log('\n☁️  Supabase 영상 업로드 중...');
@@ -1033,7 +1085,7 @@ async function run() {
   console.log(`⏳ 발행 전 대기 중 (${Math.round(humanDelay / 1000)}초)...`);
   await new Promise(r => setTimeout(r, humanDelay));
 
-  // ── Instagram ─────────────────────────────────────────────
+  // ── Instagram 캐러셀 ──────────────────────────────────────────
   let igStatus;
   const igLog = await getPublishLog(today, 'instagram');
   if (igLog?.status === 'success') {
@@ -1041,24 +1093,35 @@ async function run() {
     console.log('⏭️ Instagram 이미 발행됨 — 스킵');
   } else {
     const igRetryCount = (igLog?.retry_count || 0);
-    // Instagram 하루 발행 횟수 제한 (1회 초과 시 차단 위험)
     if (igRetryCount >= 3) {
       igStatus = '⏸️ (재시도 한도 초과 — 내일 재시작)';
       await tg(`⚠️ Instagram 재시도 한도 초과 (${igRetryCount}회)\n오늘은 발행 중단. 내일 자동 재시작.`);
     } else {
       try {
-        const igPostId = await withRetry('Instagram 릴스', () => postInstagramReel(videoUrl, igCaption), 1, 30000);
+        // 캐러셀 슬라이드 콘텐츠 구성 (주식 데이터 우선)
+        const research_data = igSlidesInput || '';
+        const carouselToolName = research_data.includes('hook_kr') ? toolName : toolName;
+        const carouselSlides = parseIGSlides(research_data, toolName);
+
+        // Pexels 배경으로 캐러셀 이미지 생성
+        console.log('\n🖼️ Instagram 캐러셀 이미지 생성 중...');
+        const igImagePaths = await generateCarouselImages(carouselSlides, toolName, igBgImage);
+        const igImageUrls = await uploadCarouselToSupabase(igImagePaths);
+
+        // 캐러셀 캡션 (주식 해시태그, #Shorts 제외)
+        const igCarouselHashtags = '#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식';
+        const igCarouselCaption = `${igCaption.split('\n\n')[0]}\n\n${igCarouselHashtags}`.slice(0, 2200);
+
+        const igPostId = await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCarouselCaption), 1, 30000);
         igStatus = '✅';
         await upsertPublishLog(today, 'instagram', 'success', {
           postId: igPostId,
-          content: { videoUrl, caption: igCaption },
+          content: { imageUrls: igImageUrls, caption: igCarouselCaption },
           retryCount: igRetryCount,
         });
-        await tg(`🎬 Instagram 릴스 발행 완료\n🔧 툴: ${toolName}`);
+        await tg(`🖼️ Instagram 캐러셀 발행 완료\n📸 ${toolName}`);
       } catch (e) {
         const errMsg = e.message || '';
-        // 차단/스팸 감지 에러코드 — 즉시 중단 (재시도 금지)
-        // IG 에러코드 정확히 매칭 (숫자 문자열 포함 방지)
         const errLower = errMsg.toLowerCase();
         const isBanned = errMsg.includes('"code":190') || errMsg.includes('"code":368') ||
                          errMsg.includes('"code":32') ||
@@ -1066,21 +1129,17 @@ async function run() {
                          errLower.includes('restricted') || errLower.includes('action is blocked');
         const isRateLimited = errLower.includes('request limit reached') ||
                               errLower.includes('rate limit') ||
-                              errMsg.includes('"code":4,') || errMsg.includes('"code":4}'); // IG 에러코드 4 = app rate limit
+                              errMsg.includes('"code":4,') || errMsg.includes('"code":4}');
         igStatus = `❌ ${errMsg.slice(0, 60)}`;
-        // 한도 초과는 오늘 재시도 금지 (rate_limited 상태로 저장)
         const logStatus = isRateLimited ? 'rate_limited' : 'failed';
         await upsertPublishLog(today, 'instagram', logStatus, {
           errorMsg: errMsg.slice(0, 200),
-          content: { videoUrl, caption: igCaption },
           retryCount: igRetryCount + 1,
         });
         if (isRateLimited) {
-          await tg(`⏸️ Instagram API 한도 초과 — 오늘 스킵\n내일 자동 재시작됩니다.\n에러: ${errMsg.slice(0, 80)}`);
-          // throw 안 함 — YouTube는 계속 실행
+          await tg(`⏸️ Instagram API 한도 초과 — 오늘 스킵\n에러: ${errMsg.slice(0, 80)}`);
         } else if (isBanned) {
           await tg(`🚨 Instagram 차단/제한 감지! junho 확인 필요.\n에러: ${errMsg.slice(0, 100)}`);
-          // throw 안 함 — YouTube는 계속 실행
         } else {
           await tg(`⚠️ Instagram 실패\n${igStatus}`);
         }

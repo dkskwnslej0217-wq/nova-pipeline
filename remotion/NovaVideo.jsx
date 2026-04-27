@@ -52,6 +52,17 @@ function useSlideUp(delay = 0) {
   };
 }
 
+// ── 배경 이미지 ──────────────────────────────────────────────────
+function BgImage({ src }) {
+  if (!src) return null;
+  return (
+    <AbsoluteFill style={{ zIndex: 0 }}>
+      <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <AbsoluteFill style={{ background: 'rgba(13,17,23,0.75)' }} />
+    </AbsoluteFill>
+  );
+}
+
 // ── 진행 바 ──────────────────────────────────────────────────────
 function ProgressBar() {
   const frame = useCurrentFrame();
@@ -118,7 +129,7 @@ function NovaBadge({ color = C.cyan }) {
 }
 
 // ── 슬라이드 1: 후킹 ─────────────────────────────────────────────
-function HookSlide({ toolName, hookText }) {
+function HookSlide({ toolName, hookText, bgImage = '' }) {
   const frame  = useCurrentFrame();
   const bgOp   = useFade(0, 15);
   const q      = useZoomIn(5);
@@ -127,7 +138,7 @@ function HookSlide({ toolName, hookText }) {
   const pulse  = 1 + Math.sin(frame * 0.12) * 0.012;
 
   return (
-    <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
+    <AbsoluteFill style={{ background: bgImage ? 'transparent' : C.bg, fontFamily: FONT }}>
       {/* 배경 광원 */}
       <div style={{
         position: 'absolute', top: -200, left: '50%', transform: 'translateX(-50%)',
@@ -196,7 +207,7 @@ const CARD_COLORS  = [C.cyan, C.purple, C.green, C.blue];
 const CARD_ICONS   = ['⚡', '💡', '✅', '🚀'];
 const CARD_LABELS  = ['핵심 기능', '실제 사용 예시', '장점', '시작 방법'];
 
-function QuickCardSlide({ text, idx }) {
+function QuickCardSlide({ text, idx, bgImage = '' }) {
   const color  = CARD_COLORS[idx % 4];
   const icon   = CARD_ICONS[idx % 4];
   const label  = CARD_LABELS[idx % 4];
@@ -205,7 +216,7 @@ function QuickCardSlide({ text, idx }) {
   const num    = useZoomIn(0);
 
   return (
-    <AbsoluteFill style={{ background: C.bg, opacity: bgOp, fontFamily: FONT }}>
+    <AbsoluteFill style={{ background: bgImage ? 'transparent' : C.bg, opacity: bgOp, fontFamily: FONT }}>
       {/* 배경 */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
@@ -264,7 +275,7 @@ function QuickCardSlide({ text, idx }) {
 }
 
 // ── CTA 슬라이드 ─────────────────────────────────────────────────
-function CTASlide({ toolName }) {
+function CTASlide({ toolName, bgImage = '' }) {
   const frame  = useCurrentFrame();
   const { fps } = useVideoConfig();
   const bgOp   = useFade(0, 12);
@@ -274,7 +285,7 @@ function CTASlide({ toolName }) {
   const pulse  = 1 + Math.sin(frame * 0.14) * 0.025;
 
   return (
-    <AbsoluteFill style={{ background: C.bg, opacity: bgOp, fontFamily: FONT }}>
+    <AbsoluteFill style={{ background: bgImage ? 'transparent' : C.bg, opacity: bgOp, fontFamily: FONT }}>
       <div style={{
         position: 'absolute', top: -180, right: -180,
         width: 660, height: 660, borderRadius: '50%',
@@ -334,7 +345,7 @@ function CTASlide({ toolName }) {
 }
 
 // ── 메인 컴포지션 ────────────────────────────────────────────────
-export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr }) {
+export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage = '' }) {
   const cards = (bullets || []).slice(0, 4);
   // research-agent 데이터 우선 반영
   if (featuresKr) cards[0] = featuresKr.replace(/\//g, '  /  ');
@@ -347,9 +358,11 @@ export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr 
   let from = 0;
   return (
     <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
+      <BgImage src={bgImage} />
+
       {/* Hook */}
       <Sequence from={from} durationInFrames={HOOK_DUR}>
-        <HookSlide toolName={toolName} hookText={hookText || `${toolName} 이거 알아요?`} />
+        <HookSlide toolName={toolName} hookText={hookText || `${toolName} 이거 알아요?`} bgImage={bgImage} />
       </Sequence>
 
       {/* QuickCards */}
@@ -357,14 +370,14 @@ export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr 
         from = HOOK_DUR + i * CARD_DUR;
         return (
           <Sequence key={i} from={HOOK_DUR + i * CARD_DUR} durationInFrames={CARD_DUR}>
-            <QuickCardSlide text={text} idx={i} />
+            <QuickCardSlide text={text} idx={i} bgImage={bgImage} />
           </Sequence>
         );
       })}
 
       {/* CTA */}
       <Sequence from={HOOK_DUR + CARD_DUR * 4} durationInFrames={CTA_DUR}>
-        <CTASlide toolName={toolName} />
+        <CTASlide toolName={toolName} bgImage={bgImage} />
       </Sequence>
     </AbsoluteFill>
   );
