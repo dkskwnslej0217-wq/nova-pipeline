@@ -2,7 +2,8 @@ name: Create Video
 
 on:
   schedule:
-    - cron: '0 23 * * *'  # 매일 08:00 KST (23:00 UTC)
+    - cron: '0 23 * * *'  # 오전 08:00 KST — AI툴 YouTube + 미국주식 Instagram
+    - cron: '0 8 * * *'   # 오후 17:00 KST — 한국주식 Instagram (research 16:30 KST 완료 후)
   repository_dispatch:
     types: [create-video]
   workflow_dispatch:
@@ -27,6 +28,10 @@ on:
         description: 'IG 슬라이드 내용'
         required: false
         default: ''
+      run_mode:
+        description: '실행 모드 (morning / afternoon)'
+        required: false
+        default: 'morning'
       dry_run:
         description: '발행 스킵 (테스트용)'
         required: false
@@ -90,6 +95,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          RUN_MODE: ${{ github.event.schedule == '0 8 * * *' && 'afternoon' || github.event.inputs.run_mode || 'morning' }}
         run: node scripts/generate_video.js
 
       - name: 실패 시 debug-agent 트리거

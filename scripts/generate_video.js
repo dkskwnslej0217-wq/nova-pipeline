@@ -20,6 +20,7 @@ const {
 } = process.env;
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
+const RUN_MODE = process.env.RUN_MODE || 'morning'; // 'morning' | 'afternoon'
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 
 // ── Pexels 이미지 ─────────────────────────────────────────────────
@@ -979,7 +980,28 @@ async function run() {
   let toolUrlInput  = SCRIPT_TOOL_URL || '';
   let research      = null;
 
-  if (!scriptTextRaw) {
+  if (!scriptTextRaw && RUN_MODE === 'afternoon') {
+    // ── 오후 모드: 한국주식 Instagram 캐러셀만 ──────────────────
+    console.log('\n🇰🇷 오후 모드 — 한국주식 Instagram 슬라이드 생성');
+    const krResearch = await fetchResearchResult('korean_stock').catch(() => null);
+    if (!krResearch?.tool_name) {
+      console.warn('⚠️ korean_stock 데이터 없음 — 종료');
+      await tg('⚠️ NOVA 오후 — 한국주식 데이터 없음. research-agent 확인 필요.');
+      return;
+    }
+    igSlidesInput = [
+      `[S1] ${krResearch.hook_kr}`,
+      `[S2] ${krResearch.one_liner}`,
+      `[S3] ${krResearch.features_kr}`,
+      `[S4] ${krResearch.reason_kr}`,
+      `[S5] 매일 한국주식 뉴스 요약 → 팔로우 👆`,
+    ].join('\n');
+    toolNameInput  = krResearch.tool_name || '한국주식';
+    titleInput     = `오늘의 한국주식: ${toolNameInput}`;
+    scriptTextRaw  = krResearch.scenario_kr || krResearch.one_liner || toolNameInput;
+    await tg(`🇰🇷 NOVA Instagram — 한국주식\n🎬 ${krResearch.hook_kr}\n📝 ${krResearch.one_liner}`);
+
+  } else if (!scriptTextRaw) {
     console.log('\n🤖 AI 파이프라인 시작 (트렌드 수집 → 툴 선정 → 콘텐츠 생성)');
     await tg('🔄 NOVA 파이프라인 시작');
 
@@ -1072,9 +1094,10 @@ async function run() {
   let ytBgImage = '', igBgImage = '';
   try {
     const ytKeyword = toolNameInput ? `${toolNameInput} technology artificial intelligence` : 'artificial intelligence technology laptop';
+    const igKeyword = RUN_MODE === 'afternoon' ? 'korea stock market kospi trading' : 'stock market finance trading chart';
     const [ytUrl, igUrl] = await Promise.all([
-      fetchPexelsImage(ytKeyword, 'portrait'),
-      fetchPexelsImage('stock market finance trading chart', 'landscape'),
+      RUN_MODE === 'afternoon' ? Promise.resolve(null) : fetchPexelsImage(ytKeyword, 'portrait'),
+      fetchPexelsImage(igKeyword, 'landscape'),
     ]);
     [ytBgImage, igBgImage] = await Promise.all([
       imageUrlToBase64(ytUrl),
@@ -1098,21 +1121,26 @@ async function run() {
   // ── 1. TTS 비활성화 — 무음 영상으로 발행
   const audioDuration = 14;
 
-  // ── 2. 슬라이드 영상 생성 ─────────────────────────────────────
-  await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '', ytBgImage);
+  // ── 2. 슬라이드 영상 생성 (오후 모드는 인스타 캐러셀만 — 영상 스킵) ──
+  let videoUrl = null;
+  if (RUN_MODE !== 'afternoon') {
+    await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '', ytBgImage);
 
-  // ── 4. Supabase Storage 업로드 (영상) ───────────────────────────
-  console.log('\n☁️  Supabase 영상 업로드 중...');
-  const videoUrl = await withRetry('Supabase 업로드', () => uploadToSupabase('output.mp4'));
+    // ── 4. Supabase Storage 업로드 (영상) ─────────────────────────
+    console.log('\n☁️  Supabase 영상 업로드 중...');
+    videoUrl = await withRetry('Supabase 업로드', () => uploadToSupabase('output.mp4'));
+  }
 
   // ── 5. 플랫폼 발행 (순차: Instagram → YouTube) ──────────────
   // ⚠️ Facebook: 차단 해제 대기 중 — 비활성화 (재활성화 전 junho 확인 필요)
   console.log('\n📤 플랫폼 발행 중...');
   const today = kstDate();
 
-  // 인스타 릴스 캡션
-  // Instagram은 항상 주식 해시태그
-  const igHashtags = `#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식 #Shorts`;
+  // 인스타 해시태그 — 오전(미국주식) / 오후(한국주식) 구분
+  const igHashtags = RUN_MODE === 'afternoon'
+    ? `#한국주식 #코스피 #코스닥 #주식투자 #한국주식투자 #주식뉴스 #오늘의주식 #Shorts`
+    : `#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식 #Shorts`;
+  const igPlatformKey = RUN_MODE === 'afternoon' ? 'instagram_kr' : 'instagram';
   const igCaption = `${title}\n\n${scriptText.slice(0, 300)}\n\n🔗 링크는 바이오 참고\n\n${igHashtags}`.slice(0, 2200);
 
   // DRY_RUN 모드 — 발행 없이 종료
@@ -1129,10 +1157,10 @@ async function run() {
 
   // ── Instagram 캐러셀 ──────────────────────────────────────────
   let igStatus;
-  const igLog = await getPublishLog(today, 'instagram');
+  const igLog = await getPublishLog(today, igPlatformKey);
   if (igLog?.status === 'success') {
     igStatus = '✅ (이미 발행됨, 스킵)';
-    console.log('⏭️ Instagram 이미 발행됨 — 스킵');
+    console.log(`⏭️ Instagram(${igPlatformKey}) 이미 발행됨 — 스킵`);
   } else {
     const igRetryCount = (igLog?.retry_count || 0);
     if (igRetryCount >= 3) {
@@ -1140,9 +1168,8 @@ async function run() {
       await tg(`⚠️ Instagram 재시도 한도 초과 (${igRetryCount}회)\n오늘은 발행 중단. 내일 자동 재시작.`);
     } else {
       try {
-        // 캐러셀 슬라이드 콘텐츠 구성 (주식 데이터 우선)
+        // 캐러셀 슬라이드 콘텐츠 구성
         const research_data = igSlidesInput || '';
-        const carouselToolName = research_data.includes('hook_kr') ? toolName : toolName;
         const carouselSlides = parseIGSlides(research_data, toolName);
 
         // Pexels 배경으로 캐러셀 이미지 생성
@@ -1150,13 +1177,15 @@ async function run() {
         const igImagePaths = await generateCarouselImages(carouselSlides, toolName, igBgImage);
         const igImageUrls = await uploadCarouselToSupabase(igImagePaths);
 
-        // 캐러셀 캡션 (주식 해시태그, #Shorts 제외)
-        const igCarouselHashtags = '#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식';
+        // 캐러셀 캡션 (오전=미국주식, 오후=한국주식 해시태그)
+        const igCarouselHashtags = RUN_MODE === 'afternoon'
+          ? '#한국주식 #코스피 #코스닥 #주식투자 #한국주식투자 #주식뉴스 #오늘의주식'
+          : '#미국주식 #주식투자 #미국주식투자 #나스닥 #다우존스 #주식뉴스 #오늘의주식';
         const igCarouselCaption = `${igCaption.split('\n\n')[0]}\n\n${igCarouselHashtags}`.slice(0, 2200);
 
         const igPostId = await withRetry('Instagram 캐러셀', () => postInstagramCarousel(igImageUrls, igCarouselCaption), 1, 30000);
         igStatus = '✅';
-        await upsertPublishLog(today, 'instagram', 'success', {
+        await upsertPublishLog(today, igPlatformKey, 'success', {
           postId: igPostId,
           content: { imageUrls: igImageUrls, caption: igCarouselCaption },
           retryCount: igRetryCount,
@@ -1174,7 +1203,7 @@ async function run() {
                               errMsg.includes('"code":4,') || errMsg.includes('"code":4}');
         igStatus = `❌ ${errMsg.slice(0, 60)}`;
         const logStatus = isRateLimited ? 'rate_limited' : 'failed';
-        await upsertPublishLog(today, 'instagram', logStatus, {
+        await upsertPublishLog(today, igPlatformKey, logStatus, {
           errorMsg: errMsg.slice(0, 200),
           retryCount: igRetryCount + 1,
         });
@@ -1189,8 +1218,12 @@ async function run() {
     }
   }
 
-  // ── YouTube ───────────────────────────────────────────────
+  // ── YouTube (오후 모드 스킵) ────────────────────────────────
   let ytStatus;
+  if (RUN_MODE === 'afternoon') {
+    ytStatus = '⏭️ (오후 모드 — 스킵)';
+    console.log('⏭️ 오후 모드 — YouTube 스킵');
+  } else {
   const ytLog = await getPublishLog(today, 'youtube');
   if (ytLog?.status === 'success') {
     ytStatus = '✅ (이미 발행됨, 스킵)';
@@ -1237,6 +1270,7 @@ async function run() {
       await tg(`⚠️ YouTube 실패\n${ytStatus}`);
     }
   }
+  } // end afternoon else
 
   // ── Facebook ──────────────────────────────────────────────
   // 🔴 차단 해제 대기 중 — 비활성화
