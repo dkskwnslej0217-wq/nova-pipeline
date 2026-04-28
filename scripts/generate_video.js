@@ -213,33 +213,39 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
 }
 
 function parseContent(scriptText, toolName, compareWith) {
+  // 구조화된 포맷 파싱 (HOOK/FEATURE/EXAMPLE/BENEFIT/START)
+  const get = (key) => {
+    const m = scriptText.match(new RegExp(`${key}:\\s*(.+)`));
+    return m ? m[1].trim() : '';
+  };
+  const hook    = get('HOOK');
+  const feature = get('FEATURE');
+  const example = get('EXAMPLE');
+  const benefit = get('BENEFIT');
+  const start   = get('START');
+
+  if (hook && feature) {
+    return {
+      hookText: hook,
+      bullets: [
+        feature || `${toolName}의 핵심 기능`,
+        example || '실제 사용 시 바로 결과 확인 가능',
+        benefit || `${compareWith || 'ChatGPT'}보다 빠르고 간편`,
+        start   || '무료 플랜으로 지금 바로 시작',
+      ],
+    };
+  }
+
+  // 폴백: 기존 문장 분리 방식
   const sentences = (scriptText.match(/[^.!?。\n]+[.!?。]*/g) || [scriptText])
     .map(s => s.trim()).filter(s => s.length > 5);
-
   const n = sentences.length;
-
-  // 후킹 문구: 첫 문장을 질문형으로
-  const firstSentence = sentences[0] || `${toolName}을 소개합니다`;
-  const hookText = firstSentence.endsWith('?') || firstSentence.endsWith('요?')
-    ? firstSentence
-    : `${toolName} 이거 알아요?`;
-
-  // 퀵카드 4장 (핵심기능 / 이런분께 / 장점 / 시작방법)
-  const bullets = n >= 5
-    ? [
-        sentences[1] || `${toolName}의 핵심 기능`,
-        sentences[Math.floor(n * 0.4)] || '이런 분께 추천합니다',
-        sentences[Math.floor(n * 0.6)] || '무료로 바로 시작 가능',
-        sentences[Math.floor(n * 0.8)] || '링크는 바이오 참고',
-      ]
-    : [
-        `${toolName}의 핵심 기능에 특화된 AI`,
-        '시간 아끼고 싶은 분께 강추',
-        '무료 플랜으로 바로 시작 가능',
-        `링크는 바이오에서 확인하세요 🔗`,
-      ];
-
-  return { hookText, bullets };
+  return {
+    hookText: `${toolName} 이거 알아요?`,
+    bullets: n >= 4
+      ? [sentences[0], sentences[Math.floor(n * 0.3)], sentences[Math.floor(n * 0.6)], sentences[n - 1]]
+      : [`${toolName}의 핵심 기능`, '시간 절약에 특화', '무료 플랜 제공', '링크는 바이오 참고 🔗'],
+  };
 }
 
 // ── Supabase Storage 업로드 ────────────────────────────────────────
@@ -836,7 +842,6 @@ async function finalizeContent(keywords) {
   const features    = parts[5]?.trim() || '';
   const scenario    = parts[6]?.trim() || '';
   const hookSeed    = parts[7]?.trim() || '';
-  const ctx = getContentContext();
 
   const researchCtx = [
     features  ? `핵심기능: ${features}` : '',
@@ -845,59 +850,84 @@ async function finalizeContent(keywords) {
   ].filter(Boolean).join('\n');
 
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
-  const userMsg = `새 AI 툴: ${toolName} / 설명: ${toolDesc} / 대상: ${toolTarget} / 가격: ${toolPrice} / 비교 대상: ${compareWith}
-오늘 카테고리: ${ctx.dayCategory}${researchCtx ? `\n리서치 데이터:\n${researchCtx}` : ''}
-금지어: "안녕하세요" "여러분" "오늘은" "확실히" "물론" "정말"
 
-아래 구분자 그대로 작성:
+  // ── YT 전용 프롬프트 (영상 카드 4장 + 훅 구조화) ──
+  const ytMsg = `AI 툴 소개 영상 스크립트를 작성해.
 
-===IG===
-(인스타 캐러셀 7장. [S번호] 형식. 한국어만. 해시태그 없이.)
-[S1] ${toolName} — [핵심 한 줄 설명, 20자 이내]
-[S2] ${compareWith} 쓸 때 이런 불편 없으세요?\n• [불편1]\n• [불편2]\n• [불편3]
-[S3] 실제 사용 예시\n입력: [예시]\n    ↓\n출력: [결과]
+툴: ${toolName}
+설명: ${toolDesc || '정보 없음'}
+대상: ${toolTarget || '일반 사용자'}
+가격: ${toolPrice || '무료'}
+비교: ${compareWith}
+${researchCtx ? `추가 정보:\n${researchCtx}` : ''}
+
+아래 형식 그대로 작성 (다른 말 없이):
+HOOK: [시청자가 멈추는 후킹 질문/문장. 30자 이내. "${toolName} 이거 알아?" 형태 금지. 구체적 불편함/혜택으로]
+FEATURE: [${toolName}의 핵심 기능 한 줄. 실제 기능 구체적으로. 50자 이내]
+EXAMPLE: [실제 사용 예시. "~하면 ~할 수 있다" 형식. 구체적 숫자/상황 포함. 60자 이내]
+BENEFIT: [${compareWith} 대비 확실한 장점 한 줄. 구체적으로. 50자 이내]
+START: [지금 바로 시작하는 방법. 행동 유도. 40자 이내]
+
+예시:
+HOOK: 보고서 쓰는 데 2시간씩 쓰고 있나요?
+FEATURE: AI가 회의록을 자동으로 요약해 핵심만 추출
+EXAMPLE: 1시간 회의를 붙여넣으면 3분 만에 요약본 완성
+BENEFIT: ChatGPT는 직접 입력해야 하지만 이건 자동 연동
+START: 무료 플랜으로 오늘 바로 시작 가능, 링크는 바이오`;
+
+  // ── IG 전용 프롬프트 ──
+  const igMsg = `AI 툴 인스타그램 캐러셀 7장을 작성해.
+
+툴: ${toolName}
+설명: ${toolDesc || '정보 없음'}
+비교: ${compareWith}
+${researchCtx ? `추가 정보:\n${researchCtx}` : ''}
+금지어: "안녕하세요" "여러분" "오늘은"
+
+[S1] ${toolName} — [핵심 기능 20자 이내]
+[S2] ${compareWith} 쓸 때 이런 불편 없으세요?\n• [구체적 불편1]\n• [구체적 불편2]\n• [구체적 불편3]
+[S3] 실제 사용 예시\n입력: [구체적 예시]\n    ↓\n출력: [구체적 결과]
 [S4] 사용법 3단계\n① [단계1]\n② [단계2]\n③ [단계3]
-[S5] ${compareWith} vs ${toolName}\n속도: [비교]\n가격: [비교]\n정확도: [비교]
-[S6] ✅ 추천: [이런 분]\n❌ 비추천: [이런 분]
-[S7] 지금 무료로 시작 가능 → 링크는 바이오 참고 🔗
+[S5] ${compareWith} vs ${toolName}\n속도: [구체적 비교]\n가격: [구체적 비교]\n정확도: [구체적 비교]
+[S6] ✅ 추천: [구체적 대상]\n❌ 비추천: [구체적 대상]
+[S7] 지금 무료로 시작 가능 → 링크는 바이오 참고 🔗`;
 
-===YT===
-(나레이션 60초. 말하듯 자연스럽게. 350~450자.
-1. 후킹 — ${hookSeed || `${compareWith} 쓸 때 겪는 불편함`}
-2. 소개 — ${toolName}이 뭘 하는지
-3. 장점 — ${compareWith}보다 나은 점
-4. 단점 — 솔직하게 1가지
-5. 추천 대상 — 구체적으로
-6. CTA — 구독+알림 1문장)`;
-
-  async function callGroq() {
+  async function callGroqYT() {
     const r = await ft('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }], max_tokens: 600, temperature: 0.8 }),
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: ytMsg }],
+        max_tokens: 600,
+        temperature: 0.75,
+      }),
     }, 15000);
-    if (!r.ok) throw new Error(`Groq ${r.status}`);
+    if (!r.ok) throw new Error(`Groq YT ${r.status}`);
     return (await r.json()).choices[0].message.content;
   }
 
-  async function callClaude() {
-    const r = await ft('https://api.anthropic.com/v1/messages', {
+  async function callGroqIG() {
+    const r = await ft('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: systemMsg, messages: [{ role: 'user', content: userMsg }] }),
-    }, 20000);
-    if (!r.ok) throw new Error(`Claude ${r.status}`);
-    return (await r.json()).content[0].text;
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: igMsg }],
+        max_tokens: 900,
+        temperature: 0.75,
+      }),
+    }, 15000);
+    if (!r.ok) throw new Error(`Groq IG ${r.status}`);
+    return (await r.json()).choices[0].message.content;
   }
 
-  let raw;
-  try { raw = await callGroq(); } catch { raw = await callClaude(); }
+  const [ytRaw, igRaw] = await Promise.all([
+    callGroqYT().catch(e => { console.warn(`⚠️ YT 생성 실패: ${e.message}`); return ''; }),
+    callGroqIG().catch(e => { console.warn(`⚠️ IG 생성 실패: ${e.message}`); return ''; }),
+  ]);
 
-  const extract = (tag) => {
-    const m = raw.match(new RegExp(`===${tag}===\\n([\\s\\S]*?)(?====|$)`));
-    return m ? m[1].trim() : '';
-  };
-  return { igText: extract('IG'), ytText: extract('YT') };
+  return { igText: igRaw, ytText: ytRaw };
 }
 
 const EMOTION_WORDS = ['충격', '반전', '실화', '경고', '주의', '놀라운', '무료', '비밀', '진짜', '드디어'];
