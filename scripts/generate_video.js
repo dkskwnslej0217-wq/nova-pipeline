@@ -808,6 +808,20 @@ async function fetchRecentTopics() {
   } catch { return { recent: [], topScored: [] }; }
 }
 
+async function getYoutubePatterns() {
+  try {
+    const today = kstDate();
+    const res = await ft(
+      `${SUPABASE_URL}/rest/v1/youtube_patterns?date=eq.${today}&select=analyses&limit=1`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } },
+      8000
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return (rows[0]?.analyses || []).slice(0, 5).map(v => v.title).filter(Boolean);
+  } catch { return []; }
+}
+
 async function extractKeywords(hnTrends = [], ghTrends = [], redditTrends = [], phTrends = [], crawleeTrends = [], recentTopics = [], topScored = []) {
   const trim = (arr, n = 5) => arr.slice(0, n).map(s => String(s).slice(0, 80));
   const ctx = getContentContext();
@@ -833,7 +847,7 @@ async function extractKeywords(hnTrends = [], ghTrends = [], redditTrends = [], 
   return data.candidates[0].content.parts[0].text.trim();
 }
 
-async function finalizeContent(keywords) {
+async function finalizeContent(keywords, ytPatterns = []) {
   const parts = keywords.split('|||');
   const toolName    = parts[0]?.trim() || 'AI 툴';
   const toolDesc    = parts[1]?.trim() || '';
@@ -853,6 +867,9 @@ async function finalizeContent(keywords) {
   const systemMsg = '한국 SNS 콘텐츠 전문가. 맞춤법 완벽. 오타 절대 금지. 한국어만. AI 티 없이 진짜 사람 말투.';
 
   // ── YT 전용 프롬프트 (영상 카드 4장 + 훅 구조화) ──
+  const ytPatternRef = (ytPatterns?.length)
+    ? `\n\n[유튜브 조회수 TOP 영상 제목 — 이 스타일의 훅을 참고해]:\n${ytPatterns.map(t => `• ${t}`).join('\n')}`
+    : '';
   const ytMsg = `AI 툴 소개 영상 스크립트를 작성해.
 
 툴: ${toolName}
@@ -860,7 +877,7 @@ async function finalizeContent(keywords) {
 대상: ${toolTarget || '일반 사용자'}
 가격: ${toolPrice || '무료'}
 비교: ${compareWith}
-${researchCtx ? `추가 정보:\n${researchCtx}` : ''}
+${researchCtx ? `추가 정보:\n${researchCtx}` : ''}${ytPatternRef}
 
 아래 형식 그대로 작성 (다른 말 없이):
 HOOK: [시청자가 멈추는 후킹 질문/문장. 30자 이내. "${toolName} 이거 알아?" 형태 금지. 구체적 불편함/혜택으로]
@@ -1006,7 +1023,7 @@ async function run() {
     await tg('🔄 NOVA 파이프라인 시작');
 
     // 트렌드 병렬 수집
-    const [hn, reddit, ph, googleTr, crawlee, aiResearch, stockResearch, memory] = await Promise.allSettled([
+    const [hn, reddit, ph, googleTr, crawlee, aiResearch, stockResearch, memory, ytPatterns] = await Promise.allSettled([
       fetchHNTrends(),
       fetchRedditTrends(),
       fetchProductHuntAI(),
@@ -1015,6 +1032,7 @@ async function run() {
       fetchResearchResult('ai_tool'),   // YouTube용
       fetchResearchResult('us_stock'),  // Instagram용
       fetchRecentTopics(),
+      getYoutubePatterns(),
     ]).then(r => r.map(x => x.status === 'fulfilled' ? x.value : (x.value?.recent !== undefined ? { recent: [], topScored: [] } : [])));
 
     console.log(`  HN:${hn?.length||0} Reddit:${reddit?.length||0} PH:${ph?.length||0} aiTool:${!!aiResearch?.tool_name} usStock:${!!stockResearch?.tool_name}`);
@@ -1065,7 +1083,7 @@ async function run() {
     // 콘텐츠 생성
     let igText = '', ytText = '';
     try {
-      const result = await finalizeContent(keywords);
+      const result = await finalizeContent(keywords, ytPatterns || []);
       igText = filterKoreanOnly(result.igText) || '';
       ytText = filterKoreanOnly(result.ytText) || '';
     } catch(e) {
@@ -1116,7 +1134,10 @@ async function run() {
   const compareWith = compareInput || '';
   const combo       = comboInput || '';
   const toolUrl     = toolUrlInput || '';
-  const shortsTitle = `${title} #Shorts`.slice(0, 100);
+  const ytPatternsList = (typeof ytPatterns !== 'undefined' && Array.isArray(ytPatterns)) ? ytPatterns : [];
+  const shortsTitle = (ytPatternsList.length && toolName && toolName !== 'AI 툴')
+    ? `${toolName} 모르면 손해 #Shorts`.slice(0, 100)
+    : `${title} #Shorts`.slice(0, 100);
 
   // ── 1. TTS 비활성화 — 무음 영상으로 발행
   const audioDuration = 14;
