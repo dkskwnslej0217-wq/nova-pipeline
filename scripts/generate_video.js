@@ -967,22 +967,33 @@ async function run() {
 
     console.log(`  HN:${hn?.length||0} Reddit:${reddit?.length||0} PH:${ph?.length||0} aiTool:${!!aiResearch?.tool_name} usStock:${!!stockResearch?.tool_name}`);
 
-    // ── Instagram 슬라이드: 항상 주식 데이터 사용 ────────────
-    if (stockResearch?.tool_name) {
-      igSlidesInput = [
-        `[S1] ${stockResearch.hook_kr}`,
-        `[S2] ${stockResearch.one_liner}`,
-        `[S3] ${stockResearch.features_kr}`,
-        `[S4] ${stockResearch.reason_kr}`,
-        `[S5] 매일 미국주식 뉴스 요약 → 팔로우 👆`,
-      ].join('\n');
+    // ── Instagram 슬라이드: 주식 데이터 먼저 확보 (나중에 덮어쓰지 않음) ──
+    const stockSlidesInput = stockResearch?.tool_name ? [
+      `[S1] ${stockResearch.hook_kr}`,
+      `[S2] ${stockResearch.one_liner}`,
+      `[S3] ${stockResearch.features_kr}`,
+      `[S4] ${stockResearch.reason_kr}`,
+      `[S5] 매일 미국주식 뉴스 요약 → 팔로우 👆`,
+    ].join('\n') : '';
+
+    if (stockSlidesInput) {
       console.log(`📈 Instagram 주식 슬라이드: ${stockResearch.hook_kr}`);
       await tg(`📈 NOVA Instagram — 미국주식\n🎬 ${stockResearch.hook_kr}\n📝 ${stockResearch.one_liner}`);
     }
 
-    // ── YouTube: 항상 AI 툴 데이터 사용 ─────────────────────
+    // ── YouTube: AI 툴 데이터 사용 ───────────────────────────
     {
-    const research = aiResearch;
+    // aiResearch 유효성 검사 — 주식/뉴스 헤드라인 걸러냄
+    const STOCK_KW = ['dow jones','nasdaq','s&p','futures','iran','trump','fed ','earnings wave','주식','나스닥','증시'];
+    const isValidTool = aiResearch?.tool_name &&
+      aiResearch.tool_name.length <= 60 &&
+      !STOCK_KW.some(k => aiResearch.tool_name.toLowerCase().includes(k));
+
+    research = isValidTool ? aiResearch : null;  // outer scope 업데이트
+    if (aiResearch?.tool_name && !isValidTool) {
+      console.warn(`⚠️ aiResearch 툴 이름 무효 — 폴백: "${aiResearch.tool_name.slice(0,50)}"`);
+    }
+
     let keywords;
     if (research?.tool_name) {
       keywords = `${research.tool_name}|||${research.one_liner||''}|||${research.target||''}|||${research.price||''}|||${research.compare_tool||'ChatGPT'}|||${research.features_kr||''}|||${research.scenario_kr||''}|||${research.hook_kr||''}`;
@@ -1015,7 +1026,8 @@ async function run() {
     compareInput  = parts[4]?.trim() || 'ChatGPT';
     titleInput    = `오늘의 AI 툴: ${toolNameInput}`;
     scriptTextRaw = ytText || `${toolNameInput} — AI 자동화 도구 소개`;
-    igSlidesInput = igText || '';
+    // Instagram: 주식 데이터 우선 → 없으면 AI툴 IG 콘텐츠
+    igSlidesInput = stockSlidesInput || igText || '';
     toolUrlInput  = research?.tool_url || '';
 
     // Supabase cache 저장
