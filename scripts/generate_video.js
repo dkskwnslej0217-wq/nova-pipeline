@@ -170,6 +170,40 @@ function generateSRT(text) {
   return srt;
 }
 
+// ── TTS 생성 (edge-tts Python 라이브러리) ────────────────────────
+async function generateTTS(scriptText) {
+  const ttsText = scriptText
+    .replace(/HOOK:|FEATURE:|EXAMPLE:|BENEFIT:|START:/g, '')
+    .replace(/[<>[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 250);
+
+  const txtPath = '/tmp/tts_input.txt';
+  const pyPath  = '/tmp/run_tts.py';
+
+  fs.writeFileSync(txtPath, ttsText, 'utf8');
+  fs.writeFileSync(pyPath, [
+    'import asyncio, edge_tts',
+    'async def main():',
+    `    with open('${txtPath}', encoding='utf-8') as f: text = f.read()`,
+    "    await edge_tts.Communicate(text, 'ko-KR-SunHiNeural').save('audio.mp3')",
+    'asyncio.run(main())',
+  ].join('\n'));
+
+  try {
+    execSync(`python3 ${pyPath}`, { stdio: 'inherit', timeout: 30000 });
+    if (fs.existsSync('audio.mp3')) {
+      const dur = getAudioDuration('audio.mp3');
+      console.log(`✅ TTS 생성 완료 (${dur.toFixed(1)}초)`);
+      return dur;
+    }
+  } catch (e) {
+    console.warn(`⚠️ TTS 실패: ${e.message} → 무음으로 진행`);
+  }
+  return 14;
+}
+
 // ── Remotion 렌더 ─────────────────────────────────────────────────
 async function renderWithRemotion(props, outputPath) {
   const propsFile = 'remotion_props.json';
@@ -1139,8 +1173,12 @@ async function run() {
     ? `${toolName} 모르면 손해 #Shorts`.slice(0, 100)
     : `${title} #Shorts`.slice(0, 100);
 
-  // ── 1. TTS 비활성화 — 무음 영상으로 발행
-  const audioDuration = 14;
+  // ── 1. TTS 생성 (오전 모드만 — 오후는 영상 자체를 안 만듦)
+  let audioDuration = 14;
+  if (RUN_MODE !== 'afternoon') {
+    console.log('\n🎙️ TTS 음성 생성 중...');
+    audioDuration = await generateTTS(scriptText);
+  }
 
   // ── 2. 슬라이드 영상 생성 (오후 모드는 인스타 캐러셀만 — 영상 스킵) ──
   let videoUrl = null;
