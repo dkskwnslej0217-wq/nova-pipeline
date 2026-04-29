@@ -1263,9 +1263,9 @@ async function run() {
 
   // ── 툴 스크린샷 (카드 1번 슬라이드용) ─────────────────────────
   let toolScreenshot = '';
-  if (toolUrl && RUN_MODE !== 'afternoon') {
+  if (toolUrlInput && RUN_MODE !== 'afternoon') {
     console.log('\n📸 툴 스크린샷 캡처 중...');
-    const screenshotBuf = await captureToolScreenshot(toolUrl);
+    const screenshotBuf = await captureToolScreenshot(toolUrlInput);
     toolScreenshot = bufToBase64(screenshotBuf);
     if (toolScreenshot) console.log('✅ 스크린샷 base64 변환 완료');
   }
