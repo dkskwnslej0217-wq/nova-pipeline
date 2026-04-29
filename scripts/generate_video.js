@@ -1028,6 +1028,66 @@ async function generateClickbaitTitle(toolName, scriptText) {
   return null;
 }
 
+// ── YouTube 설명란 생성 (SEO 최적화) ────────────────────────────
+async function generateYouTubeDescription(toolName, scriptText, toolUrl, research) {
+  const features = research?.features_kr || '';
+  const scenario = research?.scenario_kr || '';
+  const oneLiner = research?.one_liner || '';
+  const context  = [oneLiner, features, scenario].filter(Boolean).join('. ').slice(0, 200);
+
+  const fallback = [
+    `${toolName} — AI 자동화 도구 소개`,
+    '',
+    scriptText.replace(/HOOK:|FEATURE:|EXAMPLE:|BENEFIT:|START:/g, '').slice(0, 300),
+    '',
+    toolUrl ? `🔗 ${toolUrl}` : '',
+    '',
+    '📌 매일 새로운 AI툴을 소개합니다. 구독하고 알림 설정 🔔',
+    '',
+    '#Shorts #AI툴 #오늘의AI #인공지능 #AI자동화 #무료AI #AItools #생산성 #직장인AI #ChatGPT대안',
+  ].filter(s => s !== undefined).join('\n');
+
+  if (!GROQ_API_KEY) return fallback;
+
+  try {
+    const prompt = `유튜브 쇼츠 영상 설명란을 작성해. AI 툴 "${toolName}" 소개 영상.
+
+툴 정보: ${context || scriptText.slice(0, 150)}
+
+형식 (그대로 따라서 출력):
+[한 줄 소개 — 20자 이내]
+
+[툴이 해결하는 문제 1~2문장]
+
+[어떤 사람에게 추천인지 1문장]
+
+📌 매일 새로운 AI툴 소개 — 구독 + 알림 설정 🔔
+
+#Shorts #AI툴 #오늘의AI #인공지능 #AI자동화 #무료AI #AItools #생산성 #직장인AI #ChatGPT대안`;
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200,
+        temperature: 0.7,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+    const body = data.choices?.[0]?.message?.content?.trim();
+    if (body && body.length > 50) {
+      const full = toolUrl ? `${body}\n\n🔗 ${toolUrl}` : body;
+      console.log('✅ 설명란 생성 완료');
+      return full.slice(0, 5000);
+    }
+  } catch (e) { console.warn(`⚠️ 설명란 생성 실패: ${e.message}`); }
+
+  return fallback;
+}
+
 const EMOTION_WORDS = ['충격', '반전', '실화', '경고', '주의', '놀라운', '무료', '비밀', '진짜', '드디어'];
 const CTA_WORDS     = ['저장', '공유', '팔로우', '구독', '알림', '댓글', '링크', '지금', '시작'];
 const TREND_WORDS   = ['ai', 'gpt', '자동화', '챗봇', '무료', '최신'];
@@ -1340,8 +1400,8 @@ async function run() {
     console.log('⏭️ YouTube 이미 발행됨 — 스킵');
   } else {
     const ytRetryCount = (ytLog?.retry_count || 0);
-    const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI'];
-    const ytDesc = `${scriptText.slice(0, 400)}\n\n🔗 ${toolUrl}\n\n#Shorts #AI툴 #오늘의AI`;
+    const allTags = [...(tags.length ? tags : ['NOVA', 'AI', '툴소개']), 'Shorts', 'AI툴', '오늘의AI', toolName, 'AI자동화', '인공지능', 'AItools'];
+    const ytDesc = await generateYouTubeDescription(toolName, scriptText, toolUrl, research);
     try {
       const auth = new google.auth.OAuth2(YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET);
       auth.setCredentials({ refresh_token: YOUTUBE_REFRESH_TOKEN });
