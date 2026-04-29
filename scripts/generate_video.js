@@ -990,7 +990,7 @@ ${researchCtx ? `추가 정보:\n${researchCtx}` : ''}
 
 // ── 클릭베이트 제목 생성 (Groq) ──────────────────────────────────
 async function generateClickbaitTitle(toolName, scriptText) {
-  if (!GROQ_KEY || !toolName || toolName === 'AI 툴') return null;
+  if (!GROQ_API_KEY || !toolName || toolName === 'AI 툴') return null;
   const desc = scriptText.replace(/HOOK:|FEATURE:|EXAMPLE:|BENEFIT:|START:/g, '').slice(0, 150);
   const prompt = `AI 툴 "${toolName}"을 소개하는 유튜브 쇼츠 제목을 1개만 만들어.
 
@@ -1009,7 +1009,7 @@ async function generateClickbaitTitle(toolName, scriptText) {
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
         messages: [{ role: 'user', content: prompt }],
