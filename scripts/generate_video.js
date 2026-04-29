@@ -116,17 +116,8 @@ async function captureToolScreenshot(url) {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
     await new Promise(r => setTimeout(r, 2000));
 
-    // 쿠키 배너 숨기기
-    await page.evaluate(() => {
-      const selectors = [
-        '[id*="cookie"]', '[class*="cookie"]', '[id*="consent"]',
-        '[class*="consent"]', '[id*="banner"]', '[class*="banner"]',
-        '[id*="gdpr"]', '[class*="gdpr"]',
-      ];
-      selectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => { el.style.display = 'none'; });
-      });
-    });
+    // 쿠키 배너 숨기기 (evaluate() 대신 addStyleTag 사용 — 크래시 방지)
+    await page.addStyleTag({ content: '[id*="cookie"],[class*="cookie"],[id*="consent"],[class*="consent"],[id*="banner"],[class*="banner"],[id*="gdpr"],[class*="gdpr"]{display:none!important}' });
 
     const buf = await page.screenshot({ type: 'png', fullPage: false });
     await browser.close();
@@ -136,6 +127,10 @@ async function captureToolScreenshot(url) {
     console.warn(`⚠️ 스크린샷 실패 (${url}): ${e.message} → 그라데이션 배경 사용`);
     return null;
   }
+}
+
+function bufToBase64(buf) {
+  return buf ? `data:image/png;base64,${buf.toString('base64')}` : '';
 }
 
 // ── 오디오 길이 추출 ────────────────────────────────────────────────
@@ -228,7 +223,7 @@ async function renderWithRemotion(props, outputPath) {
 }
 
 // ── 슬라이드 영상 생성 (Remotion) ────────────────────────────────
-async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, featuresKr = '', scenarioKr = '', bgImage = '') {
+async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, featuresKr = '', scenarioKr = '', bgImage = '', screenshotImage = '') {
   const { hookText, bullets } = parseContent(scriptText, toolName, compareWith);
 
   // 음성 길이에 맞게 영상 프레임 수 계산 (30fps, 최소 14초 최대 55초)
@@ -236,7 +231,7 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
   const totalFrames = Math.round(clampedDur * 30);
   console.log(`🎬 영상 길이: ${clampedDur.toFixed(1)}초 (${totalFrames}프레임)`);
 
-  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage, totalFrames }, 'output_silent.mp4');
+  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage, screenshotImage, totalFrames }, 'output_silent.mp4');
 
   // 오디오가 있으면 합성, 없으면 그대로 사용
   if (fs.existsSync('audio.mp3')) {
@@ -1266,6 +1261,15 @@ async function run() {
     console.warn(`⚠️ Pexels 실패: ${e.message}`);
   }
 
+  // ── 툴 스크린샷 (카드 1번 슬라이드용) ─────────────────────────
+  let toolScreenshot = '';
+  if (toolUrl && RUN_MODE !== 'afternoon') {
+    console.log('\n📸 툴 스크린샷 캡처 중...');
+    const screenshotBuf = await captureToolScreenshot(toolUrl);
+    toolScreenshot = bufToBase64(screenshotBuf);
+    if (toolScreenshot) console.log('✅ 스크린샷 base64 변환 완료');
+  }
+
   // ── 기존 변수 (env 값 또는 AI 파이프라인 결과) ─────────────────
   const scriptText  = scriptTextRaw.slice(0, 2500);
   const title       = titleInput || 'NOVA AI';
@@ -1294,7 +1298,7 @@ async function run() {
   // ── 2. 슬라이드 영상 생성 (오후 모드는 인스타 캐러셀만 — 영상 스킵) ──
   let videoUrl = null;
   if (RUN_MODE !== 'afternoon') {
-    await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '', ytBgImage);
+    await buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, null, toolUrl, research?.features_kr || '', research?.scenario_kr || '', ytBgImage, toolScreenshot);
 
     // ── 4. Supabase Storage 업로드 (영상) ─────────────────────────
     console.log('\n☁️  Supabase 영상 업로드 중...');

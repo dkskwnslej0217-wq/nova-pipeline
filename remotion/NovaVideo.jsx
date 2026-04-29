@@ -211,17 +211,20 @@ const CARD_COLORS  = [C.cyan, C.purple, C.green, C.blue];
 const CARD_ICONS   = ['⚡', '💡', '✅', '🚀'];
 const CARD_LABELS  = ['핵심 기능', '실제 사용 예시', '장점', '시작 방법'];
 
-function QuickCardSlide({ text, idx, bgImage = '' }) {
+function QuickCardSlide({ text, idx, bgImage = '', screenshotImage = '' }) {
   const color  = CARD_COLORS[idx % 4];
   const icon   = CARD_ICONS[idx % 4];
   const label  = CARD_LABELS[idx % 4];
   const bgOp   = useFade(0, 8);
   const card   = useSlideRight(5);
   const num    = useZoomIn(0);
+  const imgAnim = useSlideUp(3);
+
+  const showScreenshot = idx === 0 && !!screenshotImage;
 
   return (
     <AbsoluteFill style={{ background: bgImage ? 'transparent' : C.bg, opacity: bgOp, fontFamily: FONT }}>
-      {/* 배경 */}
+      {/* 배경 광원 */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
@@ -241,18 +244,45 @@ function QuickCardSlide({ text, idx, bgImage = '' }) {
         {idx + 1} / 4
       </div>
 
+      {/* 실제 툴 스크린샷 — 카드 1번(idx=0)일 때만 상단에 표시 */}
+      {showScreenshot && (
+        <div style={{
+          position: 'absolute', top: 230, left: PAD, right: PAD, zIndex: 8,
+          ...imgAnim,
+          borderRadius: 20, overflow: 'hidden',
+          border: `1.5px solid ${color}55`,
+          boxShadow: `0 0 50px ${color}28, 0 24px 64px rgba(0,0,0,0.65)`,
+        }}>
+          {/* 브라우저 탑바 */}
+          <div style={{
+            background: '#161b22', padding: '14px 20px',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 13, height: 13, borderRadius: '50%', background: '#ff5f57' }} />
+            <div style={{ width: 13, height: 13, borderRadius: '50%', background: '#febc2e' }} />
+            <div style={{ width: 13, height: 13, borderRadius: '50%', background: '#28c840' }} />
+          </div>
+          <img
+            src={screenshotImage}
+            style={{ width: '100%', height: 520, objectFit: 'cover', objectPosition: 'top', display: 'block' }}
+          />
+        </div>
+      )}
+
       {/* 카드 */}
       <div style={{
         position: 'absolute', zIndex: 10,
-        top: '50%', left: PAD, right: PAD,
-        transform: `translateY(-50%) ${card.transform}`,
-        opacity: card.opacity,
+        left: PAD, right: PAD,
+        ...(showScreenshot
+          ? { bottom: 90, ...card }
+          : { top: '50%', transform: `translateY(-50%) ${card.transform}`, opacity: card.opacity }
+        ),
       }}>
         {/* 레이블 */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 12,
           background: `${color}22`, border: `2px solid ${color}`,
-          borderRadius: 30, padding: '12px 28px', marginBottom: 36,
+          borderRadius: 30, padding: '12px 28px', marginBottom: 28,
         }}>
           <span style={{ fontSize: 36 }}>{icon}</span>
           <span style={{ color, fontSize: 32, fontWeight: 700 }}>{label}</span>
@@ -263,12 +293,12 @@ function QuickCardSlide({ text, idx, bgImage = '' }) {
           background: 'rgba(22,27,34,0.92)',
           border: `1px solid ${color}44`,
           borderLeft: `8px solid ${color}`,
-          borderRadius: 28, padding: '52px 56px',
+          borderRadius: 28, padding: showScreenshot ? '40px 48px' : '52px 56px',
           boxShadow: `0 0 60px ${color}18`,
         }}>
           <div style={{
-            color: C.textPri, fontSize: 54, fontWeight: 800,
-            lineHeight: 1.55, wordBreak: 'keep-all',
+            color: C.textPri, fontSize: showScreenshot ? 46 : 54, fontWeight: 800,
+            lineHeight: 1.5, wordBreak: 'keep-all',
           }}>
             {text}
           </div>
@@ -349,7 +379,7 @@ function CTASlide({ toolName, bgImage = '' }) {
 }
 
 // ── 메인 컴포지션 ────────────────────────────────────────────────
-export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage = '', totalFrames = 420 }) {
+export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage = '', screenshotImage = '', totalFrames = 420 }) {
   const { hookDur, cardDur, ctaDur } = calcTiming(totalFrames);
 
   const cards = (bullets || []).slice(0, 4);
@@ -369,7 +399,7 @@ export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr,
 
       {cards.map((text, i) => (
         <Sequence key={i} from={hookDur + i * cardDur} durationInFrames={cardDur}>
-          <QuickCardSlide text={text} idx={i} bgImage={bgImage} />
+          <QuickCardSlide text={text} idx={i} bgImage={bgImage} screenshotImage={i === 0 ? screenshotImage : ''} />
         </Sequence>
       ))}
 
