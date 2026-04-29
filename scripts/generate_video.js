@@ -988,6 +988,46 @@ ${researchCtx ? `추가 정보:\n${researchCtx}` : ''}
   return { igText: igRaw, ytText: ytRaw };
 }
 
+// ── 클릭베이트 제목 생성 (Groq) ──────────────────────────────────
+async function generateClickbaitTitle(toolName, scriptText) {
+  if (!GROQ_KEY || !toolName || toolName === 'AI 툴') return null;
+  const desc = scriptText.replace(/HOOK:|FEATURE:|EXAMPLE:|BENEFIT:|START:/g, '').slice(0, 150);
+  const prompt = `AI 툴 "${toolName}"을 소개하는 유튜브 쇼츠 제목을 1개만 만들어.
+
+조건:
+- 15자 이내
+- 클릭하고 싶게 만드는 표현 (손해, 모름, 비밀, 진짜, 충격 등 감정 자극)
+- 해시태그 없이 제목만
+- 한국어
+
+예시: "${toolName} 모르면 진짜 손해", "직장인이 숨기는 AI툴", "이거 알면 업무 반토막"
+
+툴 설명: ${desc}
+
+제목만 출력 (따옴표 없이):`;
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 30,
+        temperature: 0.9,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+    const title = data.choices?.[0]?.message?.content?.trim().replace(/["']/g, '');
+    if (title && title.length >= 5 && title.length <= 25) {
+      console.log(`✅ 제목 생성: ${title}`);
+      return title;
+    }
+  } catch (e) { console.warn(`⚠️ 제목 생성 실패: ${e.message}`); }
+  return null;
+}
+
 const EMOTION_WORDS = ['충격', '반전', '실화', '경고', '주의', '놀라운', '무료', '비밀', '진짜', '드디어'];
 const CTA_WORDS     = ['저장', '공유', '팔로우', '구독', '알림', '댓글', '링크', '지금', '시작'];
 const TREND_WORDS   = ['ai', 'gpt', '자동화', '챗봇', '무료', '최신'];
@@ -1174,10 +1214,15 @@ async function run() {
   const compareWith = compareInput || '';
   const combo       = comboInput || '';
   const toolUrl     = toolUrlInput || '';
-  const ytPatternsList = (typeof ytPatterns !== 'undefined' && Array.isArray(ytPatterns)) ? ytPatterns : [];
-  const shortsTitle = (ytPatternsList.length && toolName && toolName !== 'AI 툴')
-    ? `${toolName} 모르면 손해 #Shorts`.slice(0, 100)
-    : `${title} #Shorts`.slice(0, 100);
+  // 클릭베이트 제목 생성 (Groq) — 실패 시 기본 포맷 폴백
+  const clickbaitBase = RUN_MODE !== 'afternoon'
+    ? await generateClickbaitTitle(toolName, scriptTextRaw)
+    : null;
+  const shortsTitle = clickbaitBase
+    ? `${clickbaitBase} #Shorts`.slice(0, 100)
+    : (toolName && toolName !== 'AI 툴'
+        ? `${toolName} 모르면 손해 #Shorts`.slice(0, 100)
+        : `${title} #Shorts`.slice(0, 100));
 
   // ── 1. TTS 생성 (오전 모드만 — 오후는 영상 자체를 안 만듦)
   let audioDuration = 14;
