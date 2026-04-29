@@ -13,11 +13,15 @@ export function RemotionRoot() {
       fps={FPS}
       width={W}
       height={H}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: props.totalFrames || 420,
+      })}
       defaultProps={{
-        toolName:  'AI Tool',
-        hookText:  'AI Tool 이거 알아요?',
-        bullets:   ['핵심 기능 1', '이런 분께 추천', '무료로 시작 가능', '링크는 바이오 참고'],
-        bgImage:   '',
+        toolName:    'AI Tool',
+        hookText:    'AI Tool 이거 알아요?',
+        bullets:     ['핵심 기능 1', '이런 분께 추천', '무료로 시작 가능', '링크는 바이오 참고'],
+        bgImage:     '',
+        totalFrames: 420,
       }}
     />
   );

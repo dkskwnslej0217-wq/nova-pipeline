@@ -8,11 +8,14 @@ import {
 } from 'remotion';
 import { C, FONT, W, H, PAD, FPS } from './theme.js';
 
-// ── 타이밍 상수 ───────────────────────────────────────────────────
-const HOOK_DUR  = 90;   // 3s
-const CARD_DUR  = 60;   // 2s × 4장
-const CTA_DUR   = 90;   // 3s
-const TOTAL     = HOOK_DUR + CARD_DUR * 4 + CTA_DUR; // 420프레임 = 14s
+// ── 타이밍 — totalFrames prop에서 비율로 계산 ────────────────────
+function calcTiming(totalFrames = 420) {
+  // 비율: Hook 21% / 카드 4개 57% (14.3%씩) / CTA 22%
+  const hookDur = Math.round(totalFrames * 0.21);
+  const cardDur = Math.round(totalFrames * 0.143);
+  const ctaDur  = totalFrames - hookDur - cardDur * 4;
+  return { hookDur, cardDur, ctaDur };
+}
 
 // ── 애니메이션 헬퍼 ──────────────────────────────────────────────
 function useFade(delay = 0, dur = 10) {
@@ -66,7 +69,8 @@ function BgImage({ src }) {
 // ── 진행 바 ──────────────────────────────────────────────────────
 function ProgressBar() {
   const frame = useCurrentFrame();
-  const pct = Math.min((frame / (TOTAL - 1)) * 100, 100);
+  const { durationInFrames } = useVideoConfig();
+  const pct = Math.min((frame / (durationInFrames - 1)) * 100, 100);
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0, right: 0, height: 8, zIndex: 100,
@@ -345,38 +349,31 @@ function CTASlide({ toolName, bgImage = '' }) {
 }
 
 // ── 메인 컴포지션 ────────────────────────────────────────────────
-export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage = '' }) {
+export function NovaVideo({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage = '', totalFrames = 420 }) {
+  const { hookDur, cardDur, ctaDur } = calcTiming(totalFrames);
+
   const cards = (bullets || []).slice(0, 4);
-  // research-agent 데이터 우선 반영
   if (featuresKr) cards[0] = featuresKr.replace(/\//g, '  /  ');
   if (scenarioKr) cards[1] = scenarioKr;
-  // 부족하면 기본값 채우기
   while (cards.length < 4) {
     cards.push(['핵심 작업에 특화된 AI', '무료로 바로 시작 가능', '결과물 즉시 활용', '링크는 바이오 참고'][cards.length]);
   }
 
-  let from = 0;
   return (
     <AbsoluteFill style={{ background: C.bg, fontFamily: FONT }}>
       <BgImage src={bgImage} />
 
-      {/* Hook */}
-      <Sequence from={from} durationInFrames={HOOK_DUR}>
+      <Sequence from={0} durationInFrames={hookDur}>
         <HookSlide toolName={toolName} hookText={hookText || `${toolName} 이거 알아요?`} bgImage={bgImage} />
       </Sequence>
 
-      {/* QuickCards */}
-      {cards.map((text, i) => {
-        from = HOOK_DUR + i * CARD_DUR;
-        return (
-          <Sequence key={i} from={HOOK_DUR + i * CARD_DUR} durationInFrames={CARD_DUR}>
-            <QuickCardSlide text={text} idx={i} bgImage={bgImage} />
-          </Sequence>
-        );
-      })}
+      {cards.map((text, i) => (
+        <Sequence key={i} from={hookDur + i * cardDur} durationInFrames={cardDur}>
+          <QuickCardSlide text={text} idx={i} bgImage={bgImage} />
+        </Sequence>
+      ))}
 
-      {/* CTA */}
-      <Sequence from={HOOK_DUR + CARD_DUR * 4} durationInFrames={CTA_DUR}>
+      <Sequence from={hookDur + cardDur * 4} durationInFrames={ctaDur}>
         <CTASlide toolName={toolName} bgImage={bgImage} />
       </Sequence>
     </AbsoluteFill>

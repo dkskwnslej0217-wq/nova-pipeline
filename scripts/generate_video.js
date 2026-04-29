@@ -172,12 +172,13 @@ function generateSRT(text) {
 
 // ── TTS 생성 (edge-tts Python 라이브러리) ────────────────────────
 async function generateTTS(scriptText) {
+  // 한국어 발화 속도 ~4.5자/초, 목표 20~25초 = 90~115자
   const ttsText = scriptText
     .replace(/HOOK:|FEATURE:|EXAMPLE:|BENEFIT:|START:/g, '')
     .replace(/[<>[\]]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 250);
+    .slice(0, 110);
 
   const txtPath = '/tmp/tts_input.txt';
   const pyPath  = '/tmp/run_tts.py';
@@ -212,11 +213,12 @@ async function renderWithRemotion(props, outputPath) {
   const chromium  = findChromium();
   const chromFlag = chromium ? ` --browser-executable-path="${chromium}"` : '';
   const entry     = path.resolve('remotion/index.jsx');
+  const totalFrames = props.totalFrames || 420;
 
-  console.log('\n🎬 Remotion 렌더링 중...');
+  console.log(`\n🎬 Remotion 렌더링 중... (${(totalFrames / 30).toFixed(1)}초)`);
   execSync(
     `./node_modules/.bin/remotion render "${entry}" NovaVideo "${outputPath}"` +
-    ` --codec=h264 --crf=20 --props="${propsFile}"` +
+    ` --codec=h264 --crf=20 --props="${propsFile}" --duration-in-frames=${totalFrames}` +
     chromFlag,
     { stdio: 'inherit', timeout: 600000 }
   );
@@ -229,8 +231,12 @@ async function renderWithRemotion(props, outputPath) {
 async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDuration, srtPath, toolUrl, featuresKr = '', scenarioKr = '', bgImage = '') {
   const { hookText, bullets } = parseContent(scriptText, toolName, compareWith);
 
-  // Remotion 렌더 (고정 420프레임 = 14초)
-  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage }, 'output_silent.mp4');
+  // 음성 길이에 맞게 영상 프레임 수 계산 (30fps, 최소 14초 최대 55초)
+  const clampedDur  = Math.min(Math.max(audioDuration, 14), 55);
+  const totalFrames = Math.round(clampedDur * 30);
+  console.log(`🎬 영상 길이: ${clampedDur.toFixed(1)}초 (${totalFrames}프레임)`);
+
+  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage, totalFrames }, 'output_silent.mp4');
 
   // 오디오가 있으면 합성, 없으면 그대로 사용
   if (fs.existsSync('audio.mp3')) {
