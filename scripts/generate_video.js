@@ -183,7 +183,14 @@ async function generateTTS(scriptText) {
     'import asyncio, edge_tts',
     'async def main():',
     `    with open('${txtPath}', encoding='utf-8') as f: text = f.read()`,
-    "    await edge_tts.Communicate(text, 'ko-KR-SunHiNeural').save('audio.mp3')",
+    "    comm = edge_tts.Communicate(text, 'ko-KR-SunHiNeural')",
+    '    submaker = edge_tts.SubMaker()',
+    "    with open('audio.mp3', 'wb') as af:",
+    '        async for chunk in comm.stream():',
+    "            if chunk['type'] == 'audio': af.write(chunk['data'])",
+    "            elif chunk['type'] == 'WordBoundary': submaker.create_sub((chunk['offset'], chunk['duration']), chunk['text'])",
+    "    with open('sub.vtt', 'w', encoding='utf-8') as sf:",
+    '        sf.write(submaker.generate_subs(words_in_cue=5))',
     'asyncio.run(main())',
   ].join('\n'));
 
@@ -191,7 +198,8 @@ async function generateTTS(scriptText) {
     execSync(`python3 ${pyPath}`, { stdio: 'inherit', timeout: 30000 });
     if (fs.existsSync('audio.mp3')) {
       const dur = getAudioDuration('audio.mp3');
-      console.log(`✅ TTS 생성 완료 (${dur.toFixed(1)}초)`);
+      const hasSub = fs.existsSync('sub.vtt');
+      console.log(`✅ TTS 생성 완료 (${dur.toFixed(1)}초, 자막=${hasSub ? 'O' : 'X'})`);
       return dur;
     }
   } catch (e) {
@@ -238,14 +246,30 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
     console.log('\n🔊 오디오 합성 중...');
     execSync(
       `ffmpeg -y -i output_silent.mp4 -i audio.mp3 ` +
-      `-c:v copy -c:a aac -b:a 192k -shortest output.mp4`,
+      `-c:v copy -c:a aac -b:a 192k -shortest output_nosub.mp4`,
       { stdio: 'inherit' }
     );
     try { fs.unlinkSync('output_silent.mp4'); } catch {}
   } else {
-    fs.renameSync('output_silent.mp4', 'output.mp4');
+    fs.renameSync('output_silent.mp4', 'output_nosub.mp4');
   }
-  console.log('✅ output.mp4 생성 완료 (14초 빠른 컷)');
+
+  // 자막 burn-in (sub.vtt 있을 때만)
+  if (fs.existsSync('sub.vtt')) {
+    console.log('\n📝 자막 입히는 중...');
+    execSync(
+      `ffmpeg -y -i output_nosub.mp4 ` +
+      `-vf "subtitles=sub.vtt:force_style='FontName=NanumGothic,FontSize=60,PrimaryColour=&H00CDB820,OutlineColour=&H00000000,Outline=4,Shadow=2,Alignment=2,MarginV=80'" ` +
+      `-c:a copy output.mp4`,
+      { stdio: 'inherit' }
+    );
+    try { fs.unlinkSync('output_nosub.mp4'); } catch {}
+    try { fs.unlinkSync('sub.vtt'); } catch {}
+    console.log('✅ 자막 입히기 완료');
+  } else {
+    fs.renameSync('output_nosub.mp4', 'output.mp4');
+  }
+  console.log('✅ output.mp4 생성 완료');
 }
 
 function parseContent(scriptText, toolName, compareWith) {
