@@ -6,6 +6,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
+import { generateSlideVideo } from './generate_slides.js';
 
 const {
   SCRIPT_TEXT, SCRIPT_TITLE, SCRIPT_TAGS,
@@ -102,15 +103,16 @@ async function captureToolScreenshot(url) {
 
     const launchOpts = {
       headless: 'new',
-      args: ['--disable-gpu', '--no-first-run', '--disable-extensions', '--window-size=1080,1920'],
+      args: ['--no-sandbox', '--disable-gpu', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     };
     if (executablePath) launchOpts.executablePath = executablePath;
 
     const browser = await puppeteer.launch(launchOpts);
     const page = await browser.newPage();
-    await page.setViewport({ width: 1080, height: 1920 });
+    // 데스크톱 뷰포트 — 1440x810 (16:9) 으로 슬라이드에 깔끔하게 맞춤
+    await page.setViewport({ width: 1440, height: 810 });
     await page.setUserAgent(
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
@@ -229,7 +231,7 @@ async function buildSlideVideo(toolName, scriptText, compareWith, combo, audioDu
   const totalFrames = Math.round(clampedDur * 30);
   console.log(`🎬 영상 길이: ${clampedDur.toFixed(1)}초 (${totalFrames}프레임)`);
 
-  await renderWithRemotion({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage, screenshotImage, totalFrames }, 'output_silent.mp4');
+  await generateSlideVideo({ toolName, hookText, bullets, featuresKr, scenarioKr, bgImage, screenshotImage, totalFrames }, 'output_silent.mp4');
 
   // 오디오가 있으면 합성, 없으면 그대로 사용
   if (fs.existsSync('audio.mp3')) {
