@@ -179,23 +179,13 @@ async function generateTTS(scriptText) {
   const pyPath  = '/tmp/run_tts.py';
 
   fs.writeFileSync(txtPath, ttsText, 'utf8');
-  fs.writeFileSync(pyPath, [
-    'import asyncio, edge_tts',
-    'async def main():',
-    `    with open('${txtPath}', encoding='utf-8') as f: text = f.read()`,
-    "    comm = edge_tts.Communicate(text, 'ko-KR-SunHiNeural')",
-    '    submaker = edge_tts.SubMaker()',
-    "    with open('audio.mp3', 'wb') as af:",
-    '        async for chunk in comm.stream():',
-    "            if chunk['type'] == 'audio': af.write(chunk['data'])",
-    "            elif chunk['type'] == 'WordBoundary': submaker.create_sub((chunk['offset'], chunk['duration']), chunk['text'])",
-    "    with open('sub.vtt', 'w', encoding='utf-8') as sf:",
-    '        sf.write(submaker.generate_subs(words_in_cue=5))',
-    'asyncio.run(main())',
-  ].join('\n'));
 
   try {
-    execSync(`python3 ${pyPath}`, { stdio: 'inherit', timeout: 30000 });
+    // edge-tts CLI: --file로 텍스트 파일 입력, --write-subtitles로 VTT 동시 생성
+    execSync(
+      `edge-tts --file "${txtPath}" --voice ko-KR-SunHiNeural --write-media audio.mp3 --write-subtitles sub.vtt`,
+      { stdio: 'inherit', timeout: 30000 }
+    );
     if (fs.existsSync('audio.mp3')) {
       const dur = getAudioDuration('audio.mp3');
       const hasSub = fs.existsSync('sub.vtt');
